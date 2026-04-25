@@ -928,9 +928,9 @@ function App() {
                     <th>机器</th>
                     <th>周期</th>
                     <th>桶时间</th>
-                    <th>上行(MB)</th>
-                    <th>下行(MB)</th>
-                    <th>总量(MB)</th>
+                    <th>上行</th>
+                    <th>下行</th>
+                    <th>总量</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -941,9 +941,9 @@ function App() {
                         <td>{sample.machine_id}</td>
                         <td>{sample.period_type}</td>
                         <td>{formatTime(sample.bucket_time)}</td>
-                        <td>{formatNumber(sample.upload_mb)}</td>
-                        <td>{formatNumber(sample.download_mb)}</td>
-                        <td>{formatNumber(sample.total_mb)}</td>
+                        <td>{formatTrafficValue(sample.upload_mb)}</td>
+                        <td>{formatTrafficValue(sample.download_mb)}</td>
+                        <td>{formatTrafficValue(sample.total_mb)}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -1177,6 +1177,18 @@ function formatTime(value: string) {
 
 function formatNumber(value: number) {
   return value.toFixed(3);
+}
+
+function formatTrafficValue(valueMB: number) {
+  if (valueMB >= 1024 * 1024) {
+    return `${(valueMB / (1024 * 1024)).toFixed(3)} TB`;
+  }
+
+  if (valueMB >= 1024) {
+    return `${(valueMB / 1024).toFixed(3)} GB`;
+  }
+
+  return `${valueMB.toFixed(3)} MB`;
 }
 
 function tabTitle(activeTab: TabKey) {
