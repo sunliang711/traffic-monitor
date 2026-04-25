@@ -95,8 +95,11 @@ function App() {
   const [toast, setToast] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [isLanguageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
   const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "AD";
+  const currentLanguageLabel = language === "zh" ? t("languageChinese") : t("languageEnglish");
+  const currentLanguageBadge = language === "zh" ? "中" : "EN";
 
   const isSSHKeyMismatchError =
     error.includes("APP_MASTER_KEY") || error.includes("SSH 私钥无法解密") || error.includes("ssh key decrypt failed");
@@ -194,6 +197,7 @@ function App() {
 
   useEffect(() => {
     setAccountMenuOpen(false);
+    setLanguageMenuOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -394,6 +398,62 @@ function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleLanguageSelect(nextLanguage: "zh" | "en") {
+    setLanguage(nextLanguage);
+    setLanguageMenuOpen(false);
+  }
+
+  function renderLanguageMenu() {
+    return (
+      <div className="account-menu-wrapper language-menu-wrapper">
+        <button
+          className={`account-chip language-chip${isLanguageMenuOpen ? " open" : ""}`}
+          aria-expanded={isLanguageMenuOpen}
+          aria-haspopup="menu"
+          aria-label={t("languageSwitcherLabel")}
+          onClick={() => {
+            setAccountMenuOpen(false);
+            setLanguageMenuOpen((current) => !current);
+          }}
+          type="button"
+        >
+          <span className="account-avatar">{currentLanguageBadge}</span>
+          <span className="account-copy">
+            <strong>{t("languageSwitcherLabel")}</strong>
+            <small>{currentLanguageLabel}</small>
+          </span>
+          <span className="account-menu-caret" aria-hidden="true" />
+        </button>
+        {isLanguageMenuOpen ? (
+          <div className="account-menu language-menu" role="menu">
+            <div className="account-menu-header">
+              <strong>{t("languageSwitcherLabel")}</strong>
+              <span>{currentLanguageLabel}</span>
+            </div>
+            <button
+              className={`account-menu-item language-menu-item${language === "zh" ? " active" : ""}`}
+              aria-checked={language === "zh"}
+              onClick={() => handleLanguageSelect("zh")}
+              role="menuitemradio"
+              type="button"
+            >
+              {t("languageChinese")}
+            </button>
+            <button
+              className={`account-menu-item language-menu-item${language === "en" ? " active" : ""}`}
+              aria-checked={language === "en"}
+              onClick={() => handleLanguageSelect("en")}
+              role="menuitemradio"
+              type="button"
+            >
+              {t("languageEnglish")}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   async function handleImportSSHKey(event: FormEvent<HTMLFormElement>) {
@@ -740,22 +800,7 @@ function App() {
               <h1 className="panel-title">{t("loginTitle")}</h1>
               <p className="muted">{t("loginDescription")}</p>
             </div>
-            <div className="language-switcher" aria-label={t("languageSwitcherLabel")}>
-              <button
-                className={`secondary-button language-button${language === "zh" ? " active" : ""}`}
-                onClick={() => setLanguage("zh")}
-                type="button"
-              >
-                {t("languageChinese")}
-              </button>
-              <button
-                className={`secondary-button language-button${language === "en" ? " active" : ""}`}
-                onClick={() => setLanguage("en")}
-                type="button"
-              >
-                {t("languageEnglish")}
-              </button>
-            </div>
+            {renderLanguageMenu()}
           </div>
           <form className="form-grid" onSubmit={handleLoginSubmit}>
             <label className="field">
@@ -841,28 +886,16 @@ function App() {
               </button>
             </div>
             <div className="account-toolbar">
-              <div className="topbar-language-switcher" aria-label={t("languageSwitcherLabel")}>
-                <button
-                  className={`topbar-language-button${language === "zh" ? " active" : ""}`}
-                  onClick={() => setLanguage("zh")}
-                  type="button"
-                >
-                  中
-                </button>
-                <button
-                  className={`topbar-language-button${language === "en" ? " active" : ""}`}
-                  onClick={() => setLanguage("en")}
-                  type="button"
-                >
-                  EN
-                </button>
-              </div>
+              {renderLanguageMenu()}
               <div className="account-menu-wrapper">
                 <button
                   className={`account-chip${isAccountMenuOpen ? " open" : ""}`}
                   aria-expanded={isAccountMenuOpen}
                   aria-haspopup="menu"
-                  onClick={() => setAccountMenuOpen((current) => !current)}
+                  onClick={() => {
+                    setLanguageMenuOpen(false);
+                    setAccountMenuOpen((current) => !current);
+                  }}
                   type="button"
                 >
                   <span className="account-avatar">{adminInitials}</span>

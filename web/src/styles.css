@@ -402,6 +402,10 @@ a {
   position: relative;
 }
 
+.language-menu-wrapper {
+  min-width: 0;
+}
+
 .account-chip {
   display: flex;
   align-items: center;
@@ -419,6 +423,10 @@ a {
 .account-chip.open {
   border-color: rgba(94, 234, 212, 0.42);
   background: #1d2a3d;
+}
+
+.language-chip {
+  min-width: 150px;
 }
 
 .account-avatar {
@@ -477,6 +485,10 @@ a {
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.42);
 }
 
+.language-menu {
+  width: 220px;
+}
+
 .account-menu-header {
   display: grid;
   gap: 4px;
@@ -508,6 +520,28 @@ a {
 
 .account-menu-item:hover {
   background: #182335;
+}
+
+.language-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.language-menu-item.active {
+  color: #5eead4;
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.language-menu-item.active::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 12px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
 }
 
 .account-menu-item.danger {
