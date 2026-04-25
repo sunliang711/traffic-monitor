@@ -63,6 +63,19 @@ const emptyMachineForm = (): MachineFormState => ({
 
 const listPageSize = 50;
 
+function AppIcon() {
+  return (
+    <span className="app-icon" aria-hidden="true">
+      <svg viewBox="0 0 32 32" focusable="false">
+        <path d="M7 21L12 15.5L17 18.5L25 9" />
+        <circle cx="7" cy="21" r="1.7" />
+        <circle cx="25" cy="9" r="1.7" />
+        <path d="M7 25H25" className="app-icon-base" />
+      </svg>
+    </span>
+  );
+}
+
 type ProtectedDataLoadOptions = {
   samplesPage?: number;
   sampleMachineID?: number | null;
@@ -694,7 +707,10 @@ function App() {
     return (
       <main className="app-shell auth-shell">
         <section className="panel auth-panel">
-          <p className="eyebrow">traffic-monitor</p>
+          <div className="app-brand">
+            <AppIcon />
+            <p className="eyebrow">traffic-monitor</p>
+          </div>
           <div className="panel-header-inline auth-header">
             <div className="auth-copy">
               <h1 className="panel-title">{t("loginTitle")}</h1>
@@ -750,7 +766,10 @@ function App() {
       <aside className="sidebar">
         <section className="brand-panel">
           <div className="brand-copy">
-            <p className="eyebrow">traffic-monitor</p>
+            <div className="app-brand">
+              <AppIcon />
+              <p className="eyebrow">traffic-monitor</p>
+            </div>
             <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
             <p className="muted">{t("currentAdmin", { username: profile.username })}</p>
           </div>

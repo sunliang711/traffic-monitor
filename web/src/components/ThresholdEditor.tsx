@@ -13,6 +13,7 @@ type ThresholdFormRow = {
 type ThresholdEditorProps = {
   rows: ThresholdFormRow[];
   onChange: (rows: ThresholdFormRow[]) => void;
+  showSource?: boolean;
 };
 
 function updateRow<Key extends keyof ThresholdFormRow>(
@@ -28,6 +29,7 @@ function updateRow<Key extends keyof ThresholdFormRow>(
 
 export default function ThresholdEditor(props: ThresholdEditorProps) {
   const { language, t } = useI18n();
+  const showSource = props.showSource ?? true;
 
   return (
     <div className="table-wrapper threshold-editor">
@@ -39,7 +41,7 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
             <th>{t("thresholdValue")}</th>
             <th>{t("thresholdUnit")}</th>
             <th>{t("thresholdEnabled")}</th>
-            <th>{t("thresholdSource")}</th>
+            {showSource ? <th>{t("thresholdSource")}</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -77,7 +79,7 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
                   type="checkbox"
                 />
               </td>
-              <td>{formatThresholdSource(row.source, language)}</td>
+              {showSource ? <td>{formatThresholdSource(row.source, language)}</td> : null}
             </tr>
           ))}
         </tbody>

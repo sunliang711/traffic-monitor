@@ -80,6 +80,7 @@ func registerStaticRoutes(engine *gin.Engine, staticFS fs.FS) {
 	}
 
 	engine.StaticFS("/assets", http.FS(assetsFS))
+	registerStaticFileRoute(engine, staticFS, "/favicon.svg", "favicon.svg", "image/svg+xml")
 	engine.NoRoute(func(ctx *gin.Context) {
 		indexContent, err := fs.ReadFile(staticFS, "index.html")
 		if err != nil {
@@ -88,6 +89,22 @@ func registerStaticRoutes(engine *gin.Engine, staticFS fs.FS) {
 		}
 
 		ctx.Data(http.StatusOK, "text/html; charset=utf-8", indexContent)
+	})
+}
+
+func registerStaticFileRoute(engine *gin.Engine, staticFS fs.FS, routePath string, fileName string, contentType string) {
+	if _, err := fs.Stat(staticFS, fileName); err != nil {
+		return
+	}
+
+	engine.GET(routePath, func(ctx *gin.Context) {
+		fileContent, err := fs.ReadFile(staticFS, fileName)
+		if err != nil {
+			ctx.String(http.StatusInternalServerError, "static file unavailable")
+			return
+		}
+
+		ctx.Data(http.StatusOK, contentType, fileContent)
 	})
 }
 

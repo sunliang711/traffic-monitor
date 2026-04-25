@@ -41,9 +41,9 @@ export const tabs: Array<{ key: TabKey; path: string }> = [
   { key: "overview", path: "/overview" },
   { key: "machines", path: "/machines" },
   { key: "sshKeys", path: "/ssh-keys" },
+  { key: "samples", path: "/samples" },
   { key: "thresholds", path: "/thresholds" },
   { key: "notifications", path: "/notifications" },
-  { key: "samples", path: "/samples" },
   { key: "alerts", path: "/alerts" },
 ];
 

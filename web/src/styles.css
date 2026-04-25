@@ -207,6 +207,49 @@ a {
   min-height: 0;
 }
 
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  color: var(--accent);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(94, 234, 212, 0.28), transparent 38%),
+    #0f172a;
+  box-shadow: 0 12px 28px rgba(20, 184, 166, 0.14);
+}
+
+.app-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.app-icon path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-icon circle {
+  fill: currentColor;
+}
+
+.app-icon .app-icon-base {
+  stroke: #64748b;
+  stroke-width: 2.2;
+}
+
 .brand-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -718,6 +761,19 @@ a {
 
 .threshold-editor table {
   min-width: 680px;
+}
+
+.threshold-toolbar-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.threshold-machine-select {
+  width: min(280px, 100%);
+}
+
+.threshold-modal-panel {
+  width: min(1040px, 100%);
 }
 
 .mobile-card-list {
