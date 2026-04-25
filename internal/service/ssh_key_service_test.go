@@ -20,6 +20,10 @@ func (stubProtector) Encrypt(plaintext []byte) (string, error) {
 	return "encrypted:" + string(plaintext), nil
 }
 
+func (stubProtector) Decrypt(ciphertext string) ([]byte, error) {
+	return []byte(ciphertext), nil
+}
+
 type stubSSHKeyStore struct {
 	created []*model.SSHKey
 	items   []*model.SSHKey

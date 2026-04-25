@@ -19,6 +19,8 @@ func defaultSources() []Source {
 			{Key: "session.cookie_name", EnvName: "SESSION_COOKIE_NAME"},
 			{Key: "session.secure", EnvName: "SESSION_SECURE"},
 			{Key: "session.max_age", EnvName: "SESSION_MAX_AGE"},
+			{Key: "ssh.dial_timeout", EnvName: "SSH_DIAL_TIMEOUT"},
+			{Key: "ssh.command_timeout", EnvName: "SSH_COMMAND_TIMEOUT"},
 			{Key: "security.app_master_key", EnvName: "APP_MASTER_KEY"},
 			{Key: "bootstrap.init_admin_username", EnvName: "INIT_ADMIN_USERNAME"},
 			{Key: "bootstrap.init_admin_password", EnvName: "INIT_ADMIN_PASSWORD"},

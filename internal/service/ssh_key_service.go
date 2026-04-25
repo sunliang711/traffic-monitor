@@ -37,6 +37,7 @@ type SSHKeyService struct {
 
 type SSHKeyProtector interface {
 	Encrypt(plaintext []byte) (string, error)
+	Decrypt(ciphertext string) ([]byte, error)
 }
 
 func NewSSHKeyService(sshKeyStore *repo.SSHKeyRepo, dataProtector SSHKeyProtector) *SSHKeyService {

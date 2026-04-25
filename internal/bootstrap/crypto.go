@@ -47,3 +47,34 @@ func (protector *DataProtector) Encrypt(plaintext []byte) (string, error) {
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
+
+func (protector *DataProtector) Decrypt(ciphertext string) ([]byte, error) {
+	rawCiphertext, err := base64.StdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("decode ciphertext: %w", err)
+	}
+
+	block, err := aes.NewCipher(protector.key)
+	if err != nil {
+		return nil, fmt.Errorf("create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("create gcm: %w", err)
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(rawCiphertext) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+
+	nonce := rawCiphertext[:nonceSize]
+	encryptedPayload := rawCiphertext[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, encryptedPayload, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt ciphertext: %w", err)
+	}
+
+	return plaintext, nil
+}

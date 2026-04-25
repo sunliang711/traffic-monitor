@@ -24,6 +24,10 @@ cookie_name = "traffic_monitor_session"
 max_age = "24h"
 secure = false
 
+[ssh]
+dial_timeout = "5s"
+command_timeout = "10s"
+
 [security]
 app_master_key = ""
 

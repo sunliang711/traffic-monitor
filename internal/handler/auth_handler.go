@@ -27,7 +27,7 @@ func NewAuthHandler(authService *service.AuthService, sessionStore *sessions.Coo
 	}
 }
 
-func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, authMiddleware *middleware.AuthMiddleware, sshKeyHandler *SSHKeyHandler) {
+func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, authMiddleware *middleware.AuthMiddleware, sshKeyHandler *SSHKeyHandler, machineHandler *MachineHandler) {
 	engine.GET("/healthz", healthHandler.GetHealth)
 
 	apiGroup := engine.Group("/api/v1")
@@ -41,6 +41,7 @@ func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandle
 	authenticatedGroup := apiGroup.Group("")
 	authenticatedGroup.Use(authMiddleware.RequireAdmin())
 	sshKeyHandler.RegisterRoutes(authenticatedGroup)
+	machineHandler.RegisterRoutes(authenticatedGroup)
 }
 
 func (handler *AuthHandler) Login(ctx *gin.Context) {

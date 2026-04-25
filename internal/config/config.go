@@ -11,6 +11,7 @@ type Config struct {
 	Database  DatabaseConfig  `mapstructure:"database"`
 	Log       LogConfig       `mapstructure:"log"`
 	Session   SessionConfig   `mapstructure:"session"`
+	SSH       SSHConfig       `mapstructure:"ssh"`
 	Security  SecurityConfig  `mapstructure:"security"`
 	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
 }
@@ -48,6 +49,11 @@ type SessionConfig struct {
 
 type SecurityConfig struct {
 	AppMasterKey string `mapstructure:"app_master_key"`
+}
+
+type SSHConfig struct {
+	DialTimeout    time.Duration `mapstructure:"dial_timeout"`
+	CommandTimeout time.Duration `mapstructure:"command_timeout"`
 }
 
 type BootstrapConfig struct {
@@ -109,6 +115,14 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("session.max_age must be greater than zero")
 	}
 
+	if cfg.SSH.DialTimeout <= 0 {
+		return fmt.Errorf("ssh.dial_timeout must be greater than zero")
+	}
+
+	if cfg.SSH.CommandTimeout <= 0 {
+		return fmt.Errorf("ssh.command_timeout must be greater than zero")
+	}
+
 	if cfg.Security.AppMasterKey == "" {
 		return fmt.Errorf("security.app_master_key is required")
 	}
@@ -138,6 +152,10 @@ func ProvideLogConfig(cfg Config) LogConfig {
 
 func ProvideSessionConfig(cfg Config) SessionConfig {
 	return cfg.Session
+}
+
+func ProvideSSHConfig(cfg Config) SSHConfig {
+	return cfg.SSH
 }
 
 func ProvideSecurityConfig(cfg Config) SecurityConfig {
