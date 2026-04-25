@@ -1,6 +1,7 @@
 import ThresholdEditor from "../components/ThresholdEditor";
 import type { Machine } from "../types";
 import type { MachineOption, ThresholdFormRow } from "../lib/app-types";
+import { useI18n } from "../lib/i18n";
 
 type ThresholdsPageProps = {
   busy: boolean;
@@ -19,26 +20,28 @@ type ThresholdsPageProps = {
 };
 
 export default function ThresholdsPage(props: ThresholdsPageProps) {
+  const { t } = useI18n();
+
   return (
     <div className="grid two-columns">
       <section className="panel">
-        <h3 className="panel-title">全局阈值</h3>
+        <h3 className="panel-title">{t("thresholdsGlobalTitle")}</h3>
         <form onSubmit={props.onSaveGlobalThresholds}>
           <ThresholdEditor rows={props.globalThresholdForm} onChange={props.onChangeGlobalThresholdForm} />
           <button className="primary-button" disabled={props.busy || props.globalThresholdsSaved} type="submit">
-            保存全局阈值
+            {t("thresholdsSaveGlobal")}
           </button>
         </form>
       </section>
 
       <section className="panel">
         <div className="panel-header-inline">
-          <h3 className="panel-title">单机覆盖阈值</h3>
+          <h3 className="panel-title">{t("thresholdsMachineTitle")}</h3>
           <select
             value={props.selectedMachineID ?? ""}
             onChange={(event) => props.onSelectMachine(event.target.value ? Number(event.target.value) : null)}
           >
-            <option value="">请选择机器</option>
+            <option value="">{t("thresholdsSelectMachine")}</option>
             {props.machineOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -51,11 +54,11 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
           <form onSubmit={props.onSaveMachineThresholds}>
             <ThresholdEditor rows={props.machineThresholdForm} onChange={props.onChangeMachineThresholdForm} />
             <button className="primary-button" disabled={props.busy || props.machineThresholdsSaved} type="submit">
-              保存 {props.selectedMachine.name} ({props.selectedMachine.host}) 的阈值
+              {t("thresholdsSaveMachine", { name: props.selectedMachine.name, host: props.selectedMachine.host })}
             </button>
           </form>
         ) : (
-          <p className="muted">请先选择机器。</p>
+          <p className="muted">{t("thresholdsSelectMachineFirst")}</p>
         )}
       </section>
     </div>

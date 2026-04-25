@@ -1,3 +1,6 @@
+import { formatMetricType, formatPeriodType, formatThresholdSource } from "../lib/app-utils";
+import { useI18n } from "../lib/i18n";
+
 type ThresholdFormRow = {
   period_type: string;
   metric_type: string;
@@ -24,24 +27,26 @@ function updateRow<Key extends keyof ThresholdFormRow>(
 }
 
 export default function ThresholdEditor(props: ThresholdEditorProps) {
+  const { language, t } = useI18n();
+
   return (
     <div className="table-wrapper threshold-editor">
       <table>
         <thead>
           <tr>
-            <th>周期</th>
-            <th>维度</th>
-            <th>阈值</th>
-            <th>单位</th>
-            <th>启用</th>
-            <th>来源</th>
+            <th>{t("thresholdPeriod")}</th>
+            <th>{t("thresholdDimension")}</th>
+            <th>{t("thresholdValue")}</th>
+            <th>{t("thresholdUnit")}</th>
+            <th>{t("thresholdEnabled")}</th>
+            <th>{t("thresholdSource")}</th>
           </tr>
         </thead>
         <tbody>
           {props.rows.map((row, index) => (
             <tr key={`${row.period_type}-${row.metric_type}`}>
-              <td>{row.period_type}</td>
-              <td>{row.metric_type}</td>
+              <td>{formatPeriodType(row.period_type, language)}</td>
+              <td>{formatMetricType(row.metric_type, language)}</td>
               <td>
                 <input
                   value={row.threshold_value}
@@ -72,7 +77,7 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
                   type="checkbox"
                 />
               </td>
-              <td>{row.source ?? "-"}</td>
+              <td>{formatThresholdSource(row.source, language)}</td>
             </tr>
           ))}
         </tbody>

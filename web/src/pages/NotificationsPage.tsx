@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import type { NotificationChannel } from "../types";
 import type { TelegramFormState, WebhookFormState, WebhookPreviewState } from "../lib/app-types";
+import { useI18n } from "../lib/i18n";
 
 type NotificationsPageProps = {
   busy: boolean;
@@ -18,10 +19,12 @@ type NotificationsPageProps = {
 };
 
 export default function NotificationsPage(props: NotificationsPageProps) {
+  const { t } = useI18n();
+
   return (
     <div className="grid two-columns">
       <section className="panel">
-        <h3 className="panel-title">Webhook 通知</h3>
+        <h3 className="panel-title">{t("notificationsWebhookTitle")}</h3>
         <form className="form-grid" onSubmit={props.onSaveWebhook}>
           <label className="field checkbox-field">
             <input
@@ -31,10 +34,10 @@ export default function NotificationsPage(props: NotificationsPageProps) {
               }}
               type="checkbox"
             />
-            <span>启用 Webhook</span>
+            <span>{t("notificationsEnableWebhook")}</span>
           </label>
           <label className="field">
-            <span>请求方式</span>
+            <span>{t("notificationsMethod")}</span>
             <select
               value={props.webhookForm.method}
               onChange={(event) => {
@@ -59,7 +62,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
             />
           </label>
           <label className="field full-width">
-            <span>Headers(JSON 模板)</span>
+            <span>{t("notificationsHeaders")}</span>
             <textarea
               rows={5}
               value={props.webhookForm.headersText}
@@ -74,7 +77,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
             />
           </label>
           <label className="field full-width">
-            <span>Body 模板</span>
+            <span>{t("notificationsBody")}</span>
             <textarea
               rows={8}
               value={props.webhookForm.bodyText}
@@ -98,10 +101,10 @@ export default function NotificationsPage(props: NotificationsPageProps) {
           </label>
           <div className="card">
             <div className="card-header">
-              <strong>可用变量</strong>
+              <strong>{t("notificationsVariablesTitle")}</strong>
             </div>
             <p className="card-meta">
-              URL、Headers、Body 都支持以下变量模板：
+              {t("notificationsVariablesDesc")}
               <code> {"{{machine_id}}"}</code>
               <code> {"{{machine_name}}"}</code>
               <code> {"{{machine_host}}"}</code>
@@ -118,29 +121,29 @@ export default function NotificationsPage(props: NotificationsPageProps) {
           {props.webhookPreview ? (
             <div className="card">
               <div className="card-header">
-                <strong>渲染预览</strong>
+                <strong>{t("notificationsPreviewTitle")}</strong>
               </div>
-              <p className="card-meta">URL</p>
+              <p className="card-meta">{t("notificationsPreviewURL")}</p>
               <pre className="code-block">{props.webhookPreview.url || "-"}</pre>
-              <p className="card-meta">Headers</p>
+              <p className="card-meta">{t("notificationsPreviewHeaders")}</p>
               <pre className="code-block">{props.webhookPreview.headersText || "{}"}</pre>
-              <p className="card-meta">Body</p>
+              <p className="card-meta">{t("notificationsPreviewBody")}</p>
               <pre className="code-block">{props.webhookPreview.bodyText || "-"}</pre>
             </div>
           ) : null}
           <div className="action-row">
             <button className="secondary-button" disabled={props.busy} onClick={props.onTestWebhook} type="button">
-              测试 Webhook
+              {t("notificationsTestWebhook")}
             </button>
             <button className="primary-button" disabled={props.busy || props.webhookSaved} type="submit">
-              保存 Webhook
+              {t("notificationsSaveWebhook")}
             </button>
           </div>
         </form>
       </section>
 
       <section className="panel">
-        <h3 className="panel-title">Telegram 通知</h3>
+        <h3 className="panel-title">{t("notificationsTelegramTitle")}</h3>
         <form className="form-grid" onSubmit={props.onSaveTelegram}>
           <label className="field checkbox-field">
             <input
@@ -150,7 +153,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
               }}
               type="checkbox"
             />
-            <span>启用 Telegram</span>
+            <span>{t("notificationsEnableTelegram")}</span>
           </label>
           <label className="field">
             <span>Bot Token</span>
@@ -159,7 +162,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
               onChange={(event) => {
                 props.onTelegramFormChange((current) => ({ ...current, botToken: event.target.value }));
               }}
-              placeholder="仅保存时填写"
+              placeholder={t("notificationsBotTokenPlaceholder")}
             />
           </label>
           <label className="field">
@@ -172,24 +175,26 @@ export default function NotificationsPage(props: NotificationsPageProps) {
             />
           </label>
           <button className="primary-button" disabled={props.busy || props.telegramSaved} type="submit">
-            保存 Telegram
+            {t("notificationsSaveTelegram")}
           </button>
         </form>
 
         <div className="list-block">
-          <h4>当前渠道状态</h4>
+          <h4>{t("notificationsChannelStatus")}</h4>
           {props.notificationChannels.map((channel) => (
             <article className="card" key={channel.channel_type}>
               <div className="card-header">
                 <strong>{channel.channel_type}</strong>
                 <span className={`status-badge ${channel.enabled ? "ok" : "idle"}`}>
-                  {channel.enabled ? "启用" : "停用"}
+                  {channel.enabled ? t("statusEnabled") : t("statusDisabled")}
                 </span>
               </div>
-              <p className="card-meta">已配置：{channel.configured ? "是" : "否"}</p>
-              {channel.url ? <p className="card-meta">URL：{channel.url}</p> : null}
-              {channel.chat_id ? <p className="card-meta">Chat ID：{channel.chat_id}</p> : null}
-              {channel.token_masked ? <p className="card-meta">Token：{channel.token_masked}</p> : null}
+              <p className="card-meta">
+                {t("notificationsConfigured", { value: channel.configured ? t("statusConfiguredYes") : t("statusConfiguredNo") })}
+              </p>
+              {channel.url ? <p className="card-meta">{t("notificationsURL", { url: channel.url })}</p> : null}
+              {channel.chat_id ? <p className="card-meta">{t("notificationsChatID", { value: channel.chat_id })}</p> : null}
+              {channel.token_masked ? <p className="card-meta">{t("notificationsToken", { value: channel.token_masked })}</p> : null}
             </article>
           ))}
         </div>

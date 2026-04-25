@@ -6,6 +6,8 @@ import type {
   SSHKey,
   TrafficSample,
 } from "../types";
+import { useI18n } from "../lib/i18n";
+import { formatStatusText } from "../lib/app-utils";
 
 export type OverviewTabKey = "sshKeys" | "machines" | "notifications" | "samples" | "alerts";
 
@@ -27,45 +29,46 @@ type StatCardProps = {
 };
 
 export default function OverviewTab(props: OverviewTabProps) {
+  const { language, t } = useI18n();
   const enabledMachines = props.machines.filter((machine) => machine.collect_enabled).length;
   const enabledChannels = props.notificationChannels.filter((channel) => channel.enabled).length;
 
   return (
     <div className="grid overview-grid">
       <StatCard
-        label="SSH Key"
+        label={t("overviewSSHKeysLabel")}
         value={String(props.sshKeys.length)}
-        help="当前可用的登录密钥数量"
+        help={t("overviewSSHKeysHelp")}
         onClick={() => props.onNavigate("sshKeys")}
       />
       <StatCard
-        label="机器总数"
+        label={t("overviewMachinesLabel")}
         value={String(props.machines.length)}
-        help={`启用采集 ${enabledMachines} 台`}
+        help={t("overviewMachinesHelp", { count: enabledMachines })}
         onClick={() => props.onNavigate("machines")}
       />
       <StatCard
-        label="通知渠道"
+        label={t("overviewNotificationsLabel")}
         value={String(enabledChannels)}
-        help="已启用的通知渠道数量"
+        help={t("overviewNotificationsHelp")}
         onClick={() => props.onNavigate("notifications")}
       />
       <StatCard
-        label="最近样本"
+        label={t("overviewSamplesLabel")}
         value={String(props.samples.length)}
-        help="当前查询到的样本条数"
+        help={t("overviewSamplesHelp")}
         onClick={() => props.onNavigate("samples")}
       />
       <StatCard
-        label="告警总数"
+        label={t("overviewAlertsLabel")}
         value={String(props.alerts.length)}
-        help="当前查询到的告警条数"
+        help={t("overviewAlertsHelp")}
         onClick={() => props.onNavigate("alerts")}
       />
       <StatCard
-        label="最近采集执行"
-        value={props.collectResults.length ? props.collectResults[0].status : "未执行"}
-        help="手动采集的最近一次结果"
+        label={t("overviewCollectLabel")}
+        value={props.collectResults.length ? formatStatusText(props.collectResults[0].status, language) : t("statusNotRun")}
+        help={t("overviewCollectHelp")}
       />
     </div>
   );

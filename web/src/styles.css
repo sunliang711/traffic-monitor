@@ -119,6 +119,25 @@ pre {
   gap: 12px;
 }
 
+.language-switcher {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.language-button {
+  min-width: 88px;
+}
+
+.language-button.active {
+  background: linear-gradient(135deg, #2f6dda, #4ca8f5);
+  border-color: transparent;
+}
+
+.auth-header {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
 .tab-list {
   display: grid;
   gap: 8px;

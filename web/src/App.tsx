@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { del, get, patch, post, put } from "./api";
 import OverviewTab from "./components/OverviewTab";
+import { useI18n } from "./lib/i18n";
 import type {
   LoginFormState,
   MachineFormState,
@@ -14,7 +15,19 @@ import type {
   WebhookFormState,
   WebhookPreviewState,
 } from "./lib/app-types";
-import { emptyThresholdRows, safeParseHeaders, tabKeyFromPath, tabPath, tabs, tabTitle, toErrorMessage, toThresholdFormRows, toThresholdPayloads, renderWebhookPreviewHeaders, renderWebhookPreviewTemplate } from "./lib/app-utils";
+import {
+  emptyThresholdRows,
+  safeParseHeaders,
+  tabKeyFromPath,
+  tabPath,
+  tabs,
+  tabTitle,
+  toErrorMessage,
+  toThresholdFormRows,
+  toThresholdPayloads,
+  renderWebhookPreviewHeaders,
+  renderWebhookPreviewTemplate,
+} from "./lib/app-utils";
 import SSHKeysPage from "./pages/SSHKeysPage";
 import MachinesPage from "./pages/MachinesPage";
 import ThresholdsPage from "./pages/ThresholdsPage";
@@ -49,6 +62,7 @@ const emptyMachineForm = (): MachineFormState => ({
 });
 
 function App() {
+  const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const activeTab = tabKeyFromPath(location.pathname);
@@ -151,7 +165,7 @@ function App() {
       setGlobalThresholds(globalRules);
       setGlobalThresholdForm(toThresholdFormRows(globalRules));
     } catch (loadError) {
-      setError(toErrorMessage(loadError));
+      setError(toErrorMessage(loadError, language));
     }
   }
 
@@ -187,7 +201,7 @@ function App() {
           : machinesResp[0]?.id ?? null;
       });
     } catch (loadError) {
-      setError(toErrorMessage(loadError));
+      setError(toErrorMessage(loadError, language));
     } finally {
       setBusy(false);
     }
@@ -199,7 +213,7 @@ function App() {
       setMachineThresholds(rules);
       setMachineThresholdForm(toThresholdFormRows(rules));
     } catch (loadError) {
-      setError(toErrorMessage(loadError));
+      setError(toErrorMessage(loadError, language));
     }
   }
 
@@ -236,9 +250,9 @@ function App() {
       });
       setProfile(nextProfile);
       setLoginForm((current) => ({ ...current, password: "" }));
-      setToast("登录成功");
+      setToast(t("loginSuccess"));
     } catch (loginError) {
-      setError(toErrorMessage(loginError));
+      setError(toErrorMessage(loginError, language));
     } finally {
       setBusy(false);
     }
@@ -250,9 +264,9 @@ function App() {
       await post<null>("/api/v1/auth/logout");
       setProfile(null);
       navigate("/overview", { replace: true });
-      setToast("已退出登录");
+      setToast(t("logoutSuccess"));
     } catch (logoutError) {
-      setError(toErrorMessage(logoutError));
+      setError(toErrorMessage(logoutError, language));
     } finally {
       setBusy(false);
     }
@@ -267,7 +281,7 @@ function App() {
       });
       setSSHImportForm({ name: "", privateKey: "" });
       await loadProtectedData();
-      setToast("SSH Key 导入成功");
+      setToast(t("sshKeyImportSuccess"));
     });
   }
 
@@ -279,7 +293,7 @@ function App() {
       });
       setSSHGenerateForm({ name: "" });
       await loadProtectedData();
-      setToast("SSH Key 生成成功");
+      setToast(t("sshKeyGenerateSuccess"));
     });
   }
 
@@ -291,7 +305,7 @@ function App() {
         setSSHRenameName("");
       }
       await loadProtectedData();
-      setToast("SSH Key 已删除");
+      setToast(t("sshKeyDeleteSuccess"));
     });
   }
 
@@ -313,7 +327,7 @@ function App() {
       setRenamingSSHKeyID(null);
       setSSHRenameName("");
       await loadProtectedData();
-      setToast("SSH Key 名称已更新");
+      setToast(t("sshKeyRenameSuccess"));
     });
   }
 
@@ -333,10 +347,10 @@ function App() {
     await submitAction(async () => {
       if (editingMachineID) {
         await patch<Machine, typeof payload>(`/api/v1/machines/${editingMachineID}`, payload);
-        setToast("机器已更新");
+        setToast(t("machineUpdateSuccess"));
       } else {
         await post<Machine, typeof payload>("/api/v1/machines", payload);
-        setToast("机器已创建");
+        setToast(t("machineCreateSuccess"));
       }
       setEditingMachineID(null);
       setMachineForm(emptyMachineForm());
@@ -352,7 +366,7 @@ function App() {
         setSelectedMachineID(null);
       }
       await loadProtectedData();
-      setToast("机器已删除");
+      setToast(t("machineDeleteSuccess"));
     });
   }
 
@@ -360,7 +374,7 @@ function App() {
     await submitAction(async () => {
       const result = await post<ConnectionTestResponse>(`/api/v1/machines/${id}/test-connection`);
       setConnectionResults((current) => ({ ...current, [id]: result }));
-      setToast(`机器 ${id} 连通性验证完成`);
+      setToast(t("machineConnectionDone", { id }));
     });
   }
 
@@ -372,14 +386,14 @@ function App() {
       });
       await loadProtectedData();
       setGlobalThresholdsSaved(true);
-      setToast("全局阈值已保存");
+      setToast(t("globalThresholdSaveSuccess"));
     });
   }
 
   async function handleSaveMachineThresholds(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedMachineID) {
-      setError("请先选择机器");
+      setError(t("selectMachineFirst"));
       return;
     }
 
@@ -392,7 +406,7 @@ function App() {
       );
       await loadMachineThresholds(selectedMachineID);
       setMachineThresholdsSaved(true);
-      setToast("单机阈值已保存");
+      setToast(t("machineThresholdSaveSuccess"));
     });
   }
 
@@ -410,7 +424,7 @@ function App() {
         body: webhookForm.bodyText,
       });
       setWebhookSaved(true);
-      setToast("Webhook 渠道已保存");
+      setToast(t("webhookSaveSuccess"));
     });
   }
 
@@ -432,7 +446,7 @@ function App() {
         headersText: JSON.stringify(response.rendered_headers ?? renderWebhookPreviewHeaders(parsedHeaders), null, 2),
         bodyText: response.rendered_body ?? renderWebhookPreviewTemplate(webhookForm.bodyText),
       });
-      setToast(response.body ? `Webhook 测试成功：${response.body}` : "Webhook 测试成功");
+      setToast(response.body ? t("webhookTestSuccessWithBody", { body: response.body }) : t("webhookTestSuccess"));
     });
   }
 
@@ -450,7 +464,7 @@ function App() {
       setTelegramForm((current) => ({ ...current, botToken: "" }));
       await loadProtectedData();
       setTelegramSaved(true);
-      setToast("Telegram 渠道已保存");
+      setToast(t("telegramSaveSuccess"));
     });
   }
 
@@ -461,12 +475,12 @@ function App() {
       });
       setCollectResults(response.results);
       await loadProtectedData();
-      setToast("采集任务已执行");
+      setToast(t("collectNowSuccess"));
     });
   }
 
   async function handleCleanupHistory() {
-    if (!window.confirm("确认清理历史数据吗？将硬删除超过默认保留天数的样本和告警数据，删除后不可恢复。")) {
+    if (!window.confirm(t("cleanupHistoryConfirm"))) {
       return;
     }
 
@@ -479,7 +493,7 @@ function App() {
         delete_alerts: true,
       });
       await loadProtectedData();
-      setToast(`历史数据清理完成：删除样本 ${response.deleted_samples} 条，删除告警 ${response.deleted_alerts} 条`);
+      setToast(t("cleanupHistoryDone", { samples: response.deleted_samples, alerts: response.deleted_alerts }));
     });
   }
 
@@ -527,7 +541,7 @@ function App() {
     try {
       await action();
     } catch (submitError) {
-      setError(toErrorMessage(submitError));
+      setError(toErrorMessage(submitError, language));
     } finally {
       setBusy(false);
     }
@@ -538,11 +552,31 @@ function App() {
       <main className="app-shell auth-shell">
         <section className="panel auth-panel">
           <p className="eyebrow">traffic-monitor</p>
-          <h1 className="panel-title">管理员登录</h1>
-          <p className="muted">使用已初始化的管理员账号登录管理台。</p>
+          <div className="panel-header-inline auth-header">
+            <div>
+              <h1 className="panel-title">{t("loginTitle")}</h1>
+              <p className="muted">{t("loginDescription")}</p>
+            </div>
+            <div className="language-switcher" aria-label={t("languageSwitcherLabel")}>
+              <button
+                className={`secondary-button language-button${language === "zh" ? " active" : ""}`}
+                onClick={() => setLanguage("zh")}
+                type="button"
+              >
+                {t("languageChinese")}
+              </button>
+              <button
+                className={`secondary-button language-button${language === "en" ? " active" : ""}`}
+                onClick={() => setLanguage("en")}
+                type="button"
+              >
+                {t("languageEnglish")}
+              </button>
+            </div>
+          </div>
           <form className="form-grid" onSubmit={handleLoginSubmit}>
             <label className="field">
-              <span>用户名</span>
+              <span>{t("username")}</span>
               <input
                 value={loginForm.username}
                 onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))}
@@ -550,16 +584,16 @@ function App() {
               />
             </label>
             <label className="field">
-              <span>密码</span>
+              <span>{t("password")}</span>
               <input
                 type="password"
                 value={loginForm.password}
                 onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
-                placeholder="请输入密码"
+                placeholder={t("passwordPlaceholder")}
               />
             </label>
             <button className="primary-button" disabled={busy} type="submit">
-              {busy ? "登录中..." : "登录"}
+              {busy ? t("loggingIn") : t("login")}
             </button>
           </form>
           {error ? <p className="message error">{error}</p> : null}
@@ -573,8 +607,25 @@ function App() {
       <aside className="sidebar">
         <div>
           <p className="eyebrow">traffic-monitor</p>
-          <h1 className="sidebar-title">流量监控后台</h1>
-          <p className="muted">当前管理员：{profile.username}</p>
+          <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
+          <p className="muted">{t("currentAdmin", { username: profile.username })}</p>
+        </div>
+
+        <div className="language-switcher" aria-label={t("languageSwitcherLabel")}>
+          <button
+            className={`secondary-button language-button${language === "zh" ? " active" : ""}`}
+            onClick={() => setLanguage("zh")}
+            type="button"
+          >
+            {t("languageChinese")}
+          </button>
+          <button
+            className={`secondary-button language-button${language === "en" ? " active" : ""}`}
+            onClick={() => setLanguage("en")}
+            type="button"
+          >
+            {t("languageEnglish")}
+          </button>
         </div>
 
         <nav className="tab-list">
@@ -584,31 +635,31 @@ function App() {
               to={tab.path}
               className={({ isActive }) => `tab-link${isActive ? " active" : ""}`}
             >
-              {tab.label}
+              {tabTitle(tab.key, language)}
             </NavLink>
           ))}
         </nav>
 
         <button className="secondary-button" onClick={() => void handleLogout()} type="button">
-          退出登录
+          {t("logout")}
         </button>
       </aside>
 
       <section className="content">
         <header className="content-header">
           <div>
-            <h2>{tabTitle(activeTab)}</h2>
-            <p className="muted">MVP 管理能力已接入当前后端接口。</p>
+            <h2>{tabTitle(activeTab, language)}</h2>
+            <p className="muted">{t("dashboardDescription")}</p>
           </div>
           <div className="header-actions">
             <button className="secondary-button" onClick={() => void loadProtectedData()} type="button">
-              刷新
+              {t("refresh")}
             </button>
             <button className="secondary-button" onClick={() => void handleCleanupHistory()} type="button">
-              清理历史数据
+              {t("cleanupHistory")}
             </button>
             <button className="primary-button" onClick={() => void handleCollectNow()} type="button">
-              手动采集全部机器
+              {t("collectAllMachines")}
             </button>
           </div>
         </header>
@@ -618,7 +669,7 @@ function App() {
           <div className={`message ${isSSHKeyMismatchError ? "warning" : "error"}`}>
             {isSSHKeyMismatchError ? (
               <>
-                <strong>SSH Key 与当前 APP_MASTER_KEY 不匹配</strong>
+                <strong>{t("sshKeyMismatchTitle")}</strong>
                 <span className="message-detail">{error}</span>
               </>
             ) : (
@@ -626,7 +677,7 @@ function App() {
             )}
           </div>
         ) : null}
-        {busy ? <div className="message info">正在处理请求...</div> : null}
+        {busy ? <div className="message info">{t("processingRequest")}</div> : null}
 
         <Routes>
           <Route path="/" element={<Navigate replace to="/overview" />} />

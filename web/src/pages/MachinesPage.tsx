@@ -1,6 +1,8 @@
 import type { FormEvent } from "react";
 import type { ConnectionTestResponse, Machine, SSHKey } from "../types";
 import type { MachineFormState } from "../lib/app-types";
+import { formatStatusText } from "../lib/app-utils";
+import { useI18n } from "../lib/i18n";
 
 type MachinesPageProps = {
   busy: boolean;
@@ -23,6 +25,7 @@ function sshKeyName(sshKeys: SSHKey[], sshKeyID: number) {
 }
 
 export default function MachinesPage(props: MachinesPageProps) {
+  const { language, t } = useI18n();
   const {
     busy,
     editingMachineID,
@@ -43,37 +46,37 @@ export default function MachinesPage(props: MachinesPageProps) {
     <div className="grid two-columns">
       <section className="panel">
         <div className="panel-header-inline">
-          <h3 className="panel-title">{editingMachineID ? "编辑机器" : "新增机器"}</h3>
+          <h3 className="panel-title">{editingMachineID ? t("machinesEditTitle") : t("machinesCreateTitle")}</h3>
           {editingMachineID ? (
             <button className="secondary-button" onClick={onResetMachineForm} type="button">
-              取消编辑
+              {t("machinesCancelEdit")}
             </button>
           ) : null}
         </div>
 
         <form className="form-grid" onSubmit={onMachineSubmit}>
           <label className="field">
-            <span>名称</span>
+            <span>{t("machinesName")}</span>
             <input value={machineForm.name} onChange={(event) => onUpdateMachineForm("name", event.target.value)} />
           </label>
 
           <label className="field">
-            <span>主机</span>
+            <span>{t("machinesHost")}</span>
             <input value={machineForm.host} onChange={(event) => onUpdateMachineForm("host", event.target.value)} />
           </label>
 
           <label className="field">
-            <span>端口</span>
+            <span>{t("machinesPort")}</span>
             <input value={machineForm.port} onChange={(event) => onUpdateMachineForm("port", event.target.value)} />
           </label>
 
           <label className="field">
-            <span>SSH 用户</span>
+            <span>{t("machinesSSHUser")}</span>
             <input value={machineForm.sshUser} onChange={(event) => onUpdateMachineForm("sshUser", event.target.value)} />
           </label>
 
           <label className="field">
-            <span>网卡</span>
+            <span>{t("machinesNetworkInterface")}</span>
             <input
               value={machineForm.networkInterface}
               onChange={(event) => onUpdateMachineForm("networkInterface", event.target.value)}
@@ -83,7 +86,7 @@ export default function MachinesPage(props: MachinesPageProps) {
           <label className="field">
             <span>SSH Key</span>
             <select value={machineForm.sshKeyID} onChange={(event) => onUpdateMachineForm("sshKeyID", event.target.value)}>
-              <option value="">请选择 SSH Key</option>
+              <option value="">{t("machinesSelectSSHKey")}</option>
               {sshKeys.map((sshKey) => (
                 <option key={sshKey.id} value={sshKey.id}>
                   {sshKey.name}
@@ -98,11 +101,11 @@ export default function MachinesPage(props: MachinesPageProps) {
               onChange={(event) => onUpdateMachineForm("collectEnabled", event.target.checked)}
               type="checkbox"
             />
-            <span>启用采集</span>
+            <span>{t("machinesCollectEnabled")}</span>
           </label>
 
           <label className="field full-width">
-            <span>备注</span>
+            <span>{t("machinesRemark")}</span>
             <textarea
               rows={3}
               value={machineForm.remark}
@@ -111,23 +114,23 @@ export default function MachinesPage(props: MachinesPageProps) {
           </label>
 
           <button className="primary-button" disabled={busy || machineFormSaved} type="submit">
-            {editingMachineID ? "保存修改" : "创建机器"}
+            {editingMachineID ? t("machinesSave") : t("machinesCreate")}
           </button>
         </form>
       </section>
 
       <section className="panel">
-        <h3 className="panel-title">机器列表</h3>
+        <h3 className="panel-title">{t("machinesList")}</h3>
         <div className="table-wrapper">
           <table>
             <thead>
               <tr>
-                <th>名称</th>
-                <th>主机</th>
-                <th>网卡</th>
+                <th>{t("machinesName")}</th>
+                <th>{t("machinesHost")}</th>
+                <th>{t("machinesNetworkInterface")}</th>
                 <th>SSH Key</th>
-                <th>采集</th>
-                <th>操作</th>
+                <th>{t("machinesCollectEnabled")}</th>
+                <th>{t("machinesActions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -141,24 +144,26 @@ export default function MachinesPage(props: MachinesPageProps) {
                   <td>{sshKeyName(sshKeys, machine.ssh_key_id)}</td>
                   <td>
                     <span className={`status-badge ${machine.collect_enabled ? "ok" : "idle"}`}>
-                      {machine.collect_enabled ? "启用" : "停用"}
+                      {machine.collect_enabled ? t("statusEnabled") : t("statusDisabled")}
                     </span>
                   </td>
                   <td>
                     <div className="action-row">
                       <button className="secondary-button" onClick={() => onStartEditMachine(machine)} type="button">
-                        编辑
+                        {t("machinesEdit")}
                       </button>
                       <button className="secondary-button" onClick={() => void onTestConnection(machine.id)} type="button">
-                        测试
+                        {t("machinesTest")}
                       </button>
                       <button className="danger-button" onClick={() => void onDeleteMachine(machine.id)} type="button">
-                        删除
+                        {t("machinesDelete")}
                       </button>
                     </div>
                     {connectionResults[machine.id] ? (
                       <p className="card-meta">
-                        测试结果：{connectionResults[machine.id].status}
+                        {t("machinesTestResult", {
+                          status: formatStatusText(connectionResults[machine.id].status, language),
+                        })}
                         {connectionResults[machine.id].vnstat_version
                           ? ` / ${connectionResults[machine.id].vnstat_version}`
                           : ""}

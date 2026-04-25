@@ -4,10 +4,12 @@ import {
   formatAlertPeriod,
   formatMetricType,
   formatPeriodType,
+  formatStatusText,
   formatTime,
   formatTrafficValue,
   machineDisplay,
 } from "../lib/app-utils";
+import { useI18n } from "../lib/i18n";
 
 type AlertsPageProps = {
   alerts: AlertItem[];
@@ -35,6 +37,7 @@ function notifyStatusBadgeClass(status: string) {
 }
 
 export default function AlertsPage(props: AlertsPageProps) {
+  const { language, t } = useI18n();
   const filteredAlerts = props.alerts.filter(
     (alert) => !props.selectedMachineID || alert.machine_id === props.selectedMachineID,
   );
@@ -42,12 +45,12 @@ export default function AlertsPage(props: AlertsPageProps) {
   return (
     <section className="panel">
       <div className="panel-header-inline">
-        <h3 className="panel-title">告警记录</h3>
+        <h3 className="panel-title">{t("alertsTitle")}</h3>
         <select
           value={props.selectedMachineID ?? ""}
           onChange={(event) => props.onSelectMachine(event.target.value ? Number(event.target.value) : null)}
         >
-          <option value="">全部机器</option>
+          <option value="">{t("samplesAllMachines")}</option>
           {props.machineOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -59,19 +62,19 @@ export default function AlertsPage(props: AlertsPageProps) {
         <table>
           <thead>
             <tr>
-              <th>机器</th>
-              <th>周期</th>
-              <th>维度</th>
-              <th>告警周期</th>
-              <th>阈值</th>
-              <th>实际</th>
-              <th>通知状态</th>
-              <th>通知时间</th>
+              <th>{t("tabMachines")}</th>
+              <th>{t("thresholdPeriod")}</th>
+              <th>{t("thresholdDimension")}</th>
+              <th>{t("alertsAlertWindow")}</th>
+              <th>{t("alertsThreshold")}</th>
+              <th>{t("alertsActual")}</th>
+              <th>{t("alertsNotifyStatus")}</th>
+              <th>{t("alertsNotifyTime")}</th>
             </tr>
           </thead>
           <tbody>
             {filteredAlerts.map((alert) => {
-              const machine = machineDisplay(props.machineOptions, alert.machine_id);
+              const machine = machineDisplay(props.machineOptions, alert.machine_id, language);
 
               return (
                 <tr key={alert.id}>
@@ -81,17 +84,17 @@ export default function AlertsPage(props: AlertsPageProps) {
                       {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
                     </div>
                   </td>
-                  <td>{formatPeriodType(alert.period_type)}</td>
-                  <td>{formatMetricType(alert.metric_type)}</td>
-                  <td>{formatAlertPeriod(alert.period_type, alert.bucket_time)}</td>
+                  <td>{formatPeriodType(alert.period_type, language)}</td>
+                  <td>{formatMetricType(alert.metric_type, language)}</td>
+                  <td>{formatAlertPeriod(alert.period_type, alert.bucket_time, language)}</td>
                   <td>{formatTrafficValue(alert.threshold_mb)}</td>
                   <td>{formatTrafficValue(alert.actual_mb)}</td>
                   <td>
                     <span className={`status-badge ${notifyStatusBadgeClass(alert.notify_status)}`}>
-                      {alert.notify_status}
+                      {formatStatusText(alert.notify_status, language)}
                     </span>
                   </td>
-                  <td>{alert.notified_at ? formatTime(alert.notified_at) : "-"}</td>
+                  <td>{alert.notified_at ? formatTime(alert.notified_at, language) : "-"}</td>
                 </tr>
               );
             })}

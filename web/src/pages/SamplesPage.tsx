@@ -1,6 +1,7 @@
 import type { CollectNowResponse, TrafficSample } from "../types";
 import type { MachineOption } from "../lib/app-types";
-import { formatPeriodType, formatTime, formatTrafficValue, machineDisplay } from "../lib/app-utils";
+import { formatPeriodType, formatStatusText, formatTime, formatTrafficValue, machineDisplay } from "../lib/app-utils";
+import { useI18n } from "../lib/i18n";
 
 type SamplesPageProps = {
   selectedMachineID: number | null;
@@ -11,6 +12,7 @@ type SamplesPageProps = {
   onCollectCurrentMachine: (machineID: number) => void;
 };
 export default function SamplesPage(props: SamplesPageProps) {
+  const { language, t } = useI18n();
   const filteredSamples = props.samples.filter(
     (sample) => !props.selectedMachineID || sample.machine_id === props.selectedMachineID,
   );
@@ -18,7 +20,7 @@ export default function SamplesPage(props: SamplesPageProps) {
   return (
     <section className="panel">
       <div className="panel-header-inline">
-        <h3 className="panel-title">流量样本</h3>
+        <h3 className="panel-title">{t("samplesTitle")}</h3>
         <div className="header-actions">
           {props.selectedMachineID ? (
             <button
@@ -26,14 +28,14 @@ export default function SamplesPage(props: SamplesPageProps) {
               onClick={() => props.onCollectCurrentMachine(props.selectedMachineID!)}
               type="button"
             >
-              采集当前机器
+              {t("samplesCollectCurrentMachine")}
             </button>
           ) : null}
           <select
             value={props.selectedMachineID ?? ""}
             onChange={(event) => props.onSelectMachine(event.target.value ? Number(event.target.value) : null)}
           >
-            <option value="">全部机器</option>
+            <option value="">{t("samplesAllMachines")}</option>
             {props.machineOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -47,18 +49,18 @@ export default function SamplesPage(props: SamplesPageProps) {
         <table>
           <thead>
             <tr>
-              <th>机器</th>
-              <th>周期</th>
-              <th>桶时间</th>
-              <th>上行</th>
-              <th>下行</th>
-              <th>总量</th>
-              <th>采集时间</th>
+              <th>{t("tabMachines")}</th>
+              <th>{t("thresholdPeriod")}</th>
+              <th>{t("samplesBucketTime")}</th>
+              <th>{t("metricUpload")}</th>
+              <th>{t("metricDownload")}</th>
+              <th>{t("metricTotal")}</th>
+              <th>{t("samplesCollectedAt")}</th>
             </tr>
           </thead>
           <tbody>
             {filteredSamples.map((sample) => {
-              const machine = machineDisplay(props.machineOptions, sample.machine_id);
+              const machine = machineDisplay(props.machineOptions, sample.machine_id, language);
 
               return (
                 <tr key={`${sample.id}-${sample.period_type}`}>
@@ -68,12 +70,12 @@ export default function SamplesPage(props: SamplesPageProps) {
                       {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
                     </div>
                   </td>
-                  <td>{formatPeriodType(sample.period_type)}</td>
-                  <td>{formatTime(sample.bucket_time)}</td>
+                  <td>{formatPeriodType(sample.period_type, language)}</td>
+                  <td>{formatTime(sample.bucket_time, language)}</td>
                   <td>{formatTrafficValue(sample.upload_mb)}</td>
                   <td>{formatTrafficValue(sample.download_mb)}</td>
                   <td>{formatTrafficValue(sample.total_mb)}</td>
-                  <td>{formatTime(sample.collected_at)}</td>
+                  <td>{formatTime(sample.collected_at, language)}</td>
                 </tr>
               );
             })}
@@ -83,9 +85,9 @@ export default function SamplesPage(props: SamplesPageProps) {
 
       {props.collectResults.length > 0 ? (
         <div className="list-block">
-          <h4>最近手动采集结果</h4>
+          <h4>{t("samplesRecentResults")}</h4>
           {props.collectResults.map((result) => {
-            const machine = machineDisplay(props.machineOptions, result.machine_id);
+            const machine = machineDisplay(props.machineOptions, result.machine_id, language);
 
             return (
               <article className="card" key={`${result.machine_id}-${result.status}`}>
@@ -95,11 +97,11 @@ export default function SamplesPage(props: SamplesPageProps) {
                     {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
                   </div>
                   <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
-                    {result.status}
+                    {formatStatusText(result.status, language)}
                   </span>
                 </div>
-                <p className="card-meta">样本数：{result.sample_count}</p>
-                {result.error ? <p className="card-meta">错误：{result.error}</p> : null}
+                <p className="card-meta">{t("samplesSampleCount", { count: result.sample_count })}</p>
+                {result.error ? <p className="card-meta">{t("samplesError", { error: result.error })}</p> : null}
               </article>
             );
           })}

@@ -1,3 +1,6 @@
+import type { Language } from "./i18n";
+import { translate } from "./i18n";
+
 export type TabKey =
   | "overview"
   | "machines"
@@ -34,14 +37,14 @@ export type ThresholdRulePayload = {
   enabled: boolean;
 };
 
-export const tabs: Array<{ key: TabKey; label: string; path: string }> = [
-  { key: "overview", label: "总览", path: "/overview" },
-  { key: "machines", label: "机器", path: "/machines" },
-  { key: "sshKeys", label: "SSH Key", path: "/ssh-keys" },
-  { key: "thresholds", label: "阈值", path: "/thresholds" },
-  { key: "notifications", label: "通知设置", path: "/notifications" },
-  { key: "samples", label: "样本", path: "/samples" },
-  { key: "alerts", label: "告警", path: "/alerts" },
+export const tabs: Array<{ key: TabKey; path: string }> = [
+  { key: "overview", path: "/overview" },
+  { key: "machines", path: "/machines" },
+  { key: "sshKeys", path: "/ssh-keys" },
+  { key: "thresholds", path: "/thresholds" },
+  { key: "notifications", path: "/notifications" },
+  { key: "samples", path: "/samples" },
+  { key: "alerts", path: "/alerts" },
 ];
 
 export const thresholdDimensions = [
@@ -128,15 +131,19 @@ export function renderWebhookPreviewHeaders(headers: Record<string, string>): Re
   );
 }
 
-export function toErrorMessage(error: unknown): string {
+export function toErrorMessage(error: unknown, language: Language): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return "unknown error";
+  return translate(language, "unknownError");
 }
 
-export function formatTime(value: string) {
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+function localeTag(language: Language) {
+  return language === "zh" ? "zh-CN" : "en-US";
+}
+
+export function formatTime(value: string, language: Language) {
+  return new Date(value).toLocaleString(localeTag(language), { hour12: false });
 }
 
 export function formatNumber(value: number) {
@@ -155,31 +162,31 @@ export function formatTrafficValue(valueMB: number) {
   return `${valueMB.toFixed(3)} MB`;
 }
 
-export function formatPeriodType(periodType: string) {
+export function formatPeriodType(periodType: string, language: Language) {
   switch (periodType) {
     case "hourly":
-      return "小时";
+      return translate(language, "periodHourly");
     case "daily":
-      return "天";
+      return translate(language, "periodDaily");
     default:
       return periodType;
   }
 }
 
-export function formatMetricType(metricType: string) {
+export function formatMetricType(metricType: string, language: Language) {
   switch (metricType) {
     case "upload":
-      return "上行";
+      return translate(language, "metricUpload");
     case "download":
-      return "下行";
+      return translate(language, "metricDownload");
     case "total":
-      return "总量";
+      return translate(language, "metricTotal");
     default:
       return metricType;
   }
 }
 
-export function formatAlertPeriod(periodType: string, bucketTime: string) {
+export function formatAlertPeriod(periodType: string, bucketTime: string, language: Language) {
   const start = new Date(bucketTime);
 
   if (Number.isNaN(start.getTime())) {
@@ -188,18 +195,39 @@ export function formatAlertPeriod(periodType: string, bucketTime: string) {
 
   if (periodType === "hourly") {
     const end = new Date(start.getTime() + 60 * 60 * 1000 - 1000);
-    return `${formatTime(bucketTime)} - ${end.toLocaleString("zh-CN", { hour12: false })}`;
+    return `${formatTime(bucketTime, language)} - ${end.toLocaleString(localeTag(language), { hour12: false })}`;
   }
 
   if (periodType === "daily") {
-    return `${start.toLocaleDateString("zh-CN")} 全天`;
+    return `${start.toLocaleDateString(localeTag(language))} ${translate(language, "allDay")}`;
   }
 
-  return formatTime(bucketTime);
+  return formatTime(bucketTime, language);
 }
 
-export function tabTitle(activeTab: TabKey) {
-  return tabs.find((tab) => tab.key === activeTab)?.label ?? "管理台";
+export function tabLabel(activeTab: TabKey, language: Language) {
+  switch (activeTab) {
+    case "overview":
+      return translate(language, "tabOverview");
+    case "machines":
+      return translate(language, "tabMachines");
+    case "sshKeys":
+      return translate(language, "tabSSHKeys");
+    case "thresholds":
+      return translate(language, "tabThresholds");
+    case "notifications":
+      return translate(language, "tabNotifications");
+    case "samples":
+      return translate(language, "tabSamples");
+    case "alerts":
+      return translate(language, "tabAlerts");
+    default:
+      return translate(language, "consoleTitle");
+  }
+}
+
+export function tabTitle(activeTab: TabKey, language: Language) {
+  return tabLabel(activeTab, language);
 }
 
 export function tabPath(tab: TabKey) {
@@ -210,12 +238,12 @@ export function tabKeyFromPath(pathname: string): TabKey {
   return tabs.find((tab) => tab.path === pathname)?.key ?? "overview";
 }
 
-export function machineLabel(machineOptions: MachineLabelOption[], machineID: number) {
-  return machineOptions.find((option) => option.value === machineID)?.label ?? `机器 ${machineID}`;
+export function machineLabel(machineOptions: MachineLabelOption[], machineID: number, language: Language) {
+  return machineOptions.find((option) => option.value === machineID)?.label ?? translate(language, "machineLabel", { id: machineID });
 }
 
-export function machineDisplay(machineOptions: MachineLabelOption[], machineID: number): MachineDisplay {
-  const label = machineLabel(machineOptions, machineID);
+export function machineDisplay(machineOptions: MachineLabelOption[], machineID: number, language: Language): MachineDisplay {
+  const label = machineLabel(machineOptions, machineID, language);
   const matched = label.match(/^(.*)\s+\((.*)\)$/);
 
   if (!matched) {
@@ -226,4 +254,46 @@ export function machineDisplay(machineOptions: MachineLabelOption[], machineID: 
     primary: matched[1],
     secondary: matched[2],
   };
+}
+
+export function formatStatusText(status: string, language: Language) {
+  switch (status.toLowerCase()) {
+    case "success":
+      return translate(language, "statusSuccess");
+    case "sent":
+      return translate(language, "statusSent");
+    case "ok":
+      return translate(language, "statusOk");
+    case "pending":
+      return translate(language, "statusPending");
+    case "queued":
+      return translate(language, "statusQueued");
+    case "processing":
+      return translate(language, "statusProcessing");
+    case "failed":
+      return translate(language, "statusFailed");
+    case "error":
+      return translate(language, "statusError");
+    default:
+      return status;
+  }
+}
+
+export function formatThresholdSource(source: string | undefined, language: Language) {
+  if (!source) {
+    return translate(language, "sourceUnknown");
+  }
+
+  switch (source.toLowerCase()) {
+    case "global":
+      return translate(language, "sourceGlobal");
+    case "machine":
+      return translate(language, "sourceMachine");
+    case "inherited":
+      return translate(language, "sourceInherited");
+    case "default":
+      return translate(language, "sourceDefault");
+    default:
+      return source;
+  }
 }

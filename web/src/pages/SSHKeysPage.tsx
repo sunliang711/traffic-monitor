@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import type { SSHKey } from "../types";
 import type { SSHKeyGenerateState, SSHKeyImportState } from "../lib/app-types";
+import { useI18n } from "../lib/i18n";
 
 type SSHKeysPageProps = {
   busy: boolean;
@@ -21,13 +22,15 @@ type SSHKeysPageProps = {
 };
 
 export default function SSHKeysPage(props: SSHKeysPageProps) {
+  const { t } = useI18n();
+
   return (
     <div className="grid two-columns">
       <section className="panel">
-        <h3 className="panel-title">导入已有 SSH Key</h3>
+        <h3 className="panel-title">{t("sshKeysImportTitle")}</h3>
         <form className="form-grid" onSubmit={props.onImportSubmit}>
           <label className="field">
-            <span>名称</span>
+            <span>{t("sshKeysName")}</span>
             <input
               value={props.sshImportForm.name}
               onChange={(event) =>
@@ -36,11 +39,11 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                   name: event.target.value,
                 }))
               }
-              placeholder="例如：prod-root"
+              placeholder={t("sshKeysImportPlaceholder")}
             />
           </label>
           <label className="field">
-            <span>私钥</span>
+            <span>{t("sshKeysPrivateKey")}</span>
             <textarea
               rows={10}
               value={props.sshImportForm.privateKey}
@@ -50,7 +53,7 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                   privateKey: event.target.value,
                 }))
               }
-              placeholder="粘贴 OpenSSH 私钥"
+              placeholder={t("sshKeysPrivateKeyPlaceholder")}
             />
           </label>
           <button
@@ -58,29 +61,29 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
             disabled={props.busy || !props.sshImportForm.name.trim() || !props.sshImportForm.privateKey.trim()}
             type="submit"
           >
-            导入
+            {t("sshKeysImport")}
           </button>
         </form>
       </section>
 
       <section className="panel">
-        <h3 className="panel-title">生成新 Keypair</h3>
+        <h3 className="panel-title">{t("sshKeysGenerateTitle")}</h3>
         <form className="form-grid" onSubmit={props.onGenerateSubmit}>
           <label className="field">
-            <span>名称</span>
+            <span>{t("sshKeysName")}</span>
             <input
               value={props.sshGenerateForm.name}
               onChange={(event) => props.setSSHGenerateForm({ name: event.target.value })}
-              placeholder="例如：ops-generated"
+              placeholder={t("sshKeysGeneratePlaceholder")}
             />
           </label>
           <button className="primary-button" disabled={props.busy} type="submit">
-            生成
+            {t("sshKeysGenerate")}
           </button>
         </form>
 
         <div className="list-block">
-          <h4>SSH Key 列表</h4>
+          <h4>{t("sshKeysList")}</h4>
           {props.sshKeys.map((sshKey) => (
             <article className="card" key={sshKey.id}>
               <div className="card-header">
@@ -91,10 +94,10 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                     onClick={() => props.onStartRenameSSHKey(sshKey)}
                     type="button"
                   >
-                    重命名
+                    {t("sshKeysRename")}
                   </button>
                   <button className="danger-button" onClick={() => void props.onDeleteSSHKey(sshKey.id)} type="button">
-                    删除
+                    {t("sshKeysDelete")}
                   </button>
                 </div>
               </div>
@@ -107,27 +110,27 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                   }}
                 >
                   <label className="field">
-                    <span>新名称</span>
+                    <span>{t("sshKeysNewName")}</span>
                     <input
                       value={props.sshRenameName}
                       onChange={(event) => props.setSSHRenameName(event.target.value)}
-                      placeholder="请输入新的 SSH Key 名称"
+                      placeholder={t("sshKeysNewNamePlaceholder")}
                     />
                   </label>
                   <div className="action-row">
                     <button className="primary-button" disabled={props.busy || !props.sshRenameName.trim()} type="submit">
-                      保存名称
+                      {t("sshKeysSaveName")}
                     </button>
                     <button className="secondary-button" onClick={props.onCancelRenameSSHKey} type="button">
-                      取消
+                      {t("cancel")}
                     </button>
                   </div>
                 </form>
               ) : null}
               <p className="card-meta">
-                类型：{sshKey.key_type} / 来源：{sshKey.source_type}
+                {t("sshKeysTypeAndSource", { type: sshKey.key_type, source: sshKey.source_type })}
               </p>
-              <p className="card-meta">指纹：{sshKey.fingerprint}</p>
+              <p className="card-meta">{t("sshKeysFingerprint", { fingerprint: sshKey.fingerprint })}</p>
               <pre className="code-block">{sshKey.public_key}</pre>
             </article>
           ))}
