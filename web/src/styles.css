@@ -501,6 +501,23 @@ a {
   width: 220px;
 }
 
+.topbar-action-menu-wrapper {
+  flex: 0 0 auto;
+}
+
+.topbar-action-button {
+  min-width: 112px;
+}
+
+.topbar-action-button.open {
+  border-color: rgba(94, 234, 212, 0.42);
+  background: #1d2a3d;
+}
+
+.topbar-action-menu {
+  width: 260px;
+}
+
 .account-menu-header {
   display: grid;
   gap: 4px;
@@ -1678,13 +1695,7 @@ a {
     justify-content: flex-end;
   }
 
-  .content-hero-actions {
-    flex-wrap: nowrap;
-    gap: 8px;
-  }
-
-  .content-hero-actions .primary-button,
-  .content-hero-actions .secondary-button {
+  .topbar-action-button {
     padding-right: 14px;
     padding-left: 14px;
   }
@@ -1768,6 +1779,14 @@ a {
   .account-toolbar {
     padding-left: 0;
     border-left: 0;
+  }
+
+  .topbar-action-button {
+    width: 100%;
+  }
+
+  .topbar-action-menu {
+    width: 100%;
   }
 }
 

@@ -96,6 +96,7 @@ function App() {
   const [toast, setToast] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [isActionMenuOpen, setActionMenuOpen] = useState(false);
   const [isLanguageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
   const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "AD";
@@ -198,6 +199,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    setActionMenuOpen(false);
     setAccountMenuOpen(false);
     setLanguageMenuOpen(false);
   }, [location.pathname]);
@@ -410,6 +412,64 @@ function App() {
     setLanguageMenuOpen(false);
   }
 
+  function renderActionMenu() {
+    return (
+      <div className="account-menu-wrapper topbar-action-menu-wrapper">
+        <button
+          className={`secondary-button topbar-action-button${isActionMenuOpen ? " open" : ""}`}
+          aria-expanded={isActionMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => {
+            setAccountMenuOpen(false);
+            setLanguageMenuOpen(false);
+            setActionMenuOpen((current) => !current);
+          }}
+          type="button"
+        >
+          {t("topbarActions")}
+          <span className="account-menu-caret" aria-hidden="true" />
+        </button>
+        {isActionMenuOpen ? (
+          <div className="account-menu topbar-action-menu" role="menu">
+            <button
+              className="account-menu-item"
+              onClick={() => {
+                setActionMenuOpen(false);
+                void loadProtectedData();
+              }}
+              role="menuitem"
+              type="button"
+            >
+              {t("refresh")}
+            </button>
+            <button
+              className="account-menu-item"
+              onClick={() => {
+                setActionMenuOpen(false);
+                void handleCleanupHistory();
+              }}
+              role="menuitem"
+              type="button"
+            >
+              {t("cleanupHistory")}
+            </button>
+            <button
+              className="account-menu-item"
+              onClick={() => {
+                setActionMenuOpen(false);
+                void handleCollectNow();
+              }}
+              role="menuitem"
+              type="button"
+            >
+              {t("collectAllMachines")}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   function renderLanguageMenu() {
     return (
       <div className="account-menu-wrapper language-menu-wrapper">
@@ -419,6 +479,7 @@ function App() {
           aria-haspopup="menu"
           aria-label={t("languageSwitcherLabel")}
           onClick={() => {
+            setActionMenuOpen(false);
             setAccountMenuOpen(false);
             setLanguageMenuOpen((current) => !current);
           }}
@@ -885,17 +946,7 @@ function App() {
             <p>{pageDescription}</p>
           </div>
           <div className="topbar-right">
-            <div className="content-hero-actions">
-              <button className="secondary-button" onClick={() => void loadProtectedData()} type="button">
-                {t("refresh")}
-              </button>
-              <button className="secondary-button" onClick={() => void handleCleanupHistory()} type="button">
-                {t("cleanupHistory")}
-              </button>
-              <button className="primary-button" onClick={() => void handleCollectNow()} type="button">
-                {t("collectAllMachines")}
-              </button>
-            </div>
+            {renderActionMenu()}
             <div className="account-toolbar">
               {renderLanguageMenu()}
               <div className="account-menu-wrapper">
@@ -904,6 +955,7 @@ function App() {
                   aria-expanded={isAccountMenuOpen}
                   aria-haspopup="menu"
                   onClick={() => {
+                    setActionMenuOpen(false);
                     setLanguageMenuOpen(false);
                     setAccountMenuOpen((current) => !current);
                   }}
