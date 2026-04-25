@@ -22,9 +22,27 @@ export default function NotificationsPage(props: NotificationsPageProps) {
   const { t } = useI18n();
 
   return (
-    <div className="grid two-columns">
-      <section className="panel">
-        <h3 className="panel-title">{t("notificationsWebhookTitle")}</h3>
+    <div className="page-stack">
+      <section className="summary-strip">
+        <div className="summary-tile teal compact">
+          <span>{t("notificationsWebhookTitle")}</span>
+          <strong>{props.webhookForm.enabled ? t("statusEnabled") : t("statusDisabled")}</strong>
+        </div>
+        <div className="summary-tile amber compact">
+          <span>{t("notificationsTelegramTitle")}</span>
+          <strong>{props.telegramForm.enabled ? t("statusEnabled") : t("statusDisabled")}</strong>
+        </div>
+      </section>
+
+      <div className="grid dashboard-columns">
+      <section className="panel section-panel">
+        <div className="section-intro">
+          <div>
+            <p className="section-kicker">{t("notificationsWebhookTitle")}</p>
+            <h3 className="panel-title">{t("notificationsWebhookTitle")}</h3>
+          </div>
+          <p className="section-description">{t("notificationsPageDescription")}</p>
+        </div>
         <form className="form-grid" onSubmit={props.onSaveWebhook}>
           <label className="field checkbox-field">
             <input
@@ -142,8 +160,14 @@ export default function NotificationsPage(props: NotificationsPageProps) {
         </form>
       </section>
 
-      <section className="panel">
-        <h3 className="panel-title">{t("notificationsTelegramTitle")}</h3>
+      <section className="panel section-panel">
+        <div className="section-intro">
+          <div>
+            <p className="section-kicker">{t("notificationsTelegramTitle")}</p>
+            <h3 className="panel-title">{t("notificationsTelegramTitle")}</h3>
+          </div>
+          <p className="section-description">{t("notificationsStatusDescription")}</p>
+        </div>
         <form className="form-grid" onSubmit={props.onSaveTelegram}>
           <label className="field checkbox-field">
             <input
@@ -199,6 +223,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
           ))}
         </div>
       </section>
+      </div>
     </div>
   );
 }

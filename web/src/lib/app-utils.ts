@@ -64,14 +64,25 @@ export const emptyThresholdRows = (): ThresholdFormRow[] =>
     enabled: false,
   }));
 
-export function toThresholdPayloads(rows: ThresholdFormRow[]): ThresholdRulePayload[] {
+export function toThresholdPayloads(rows: ThresholdFormRow[], language: Language = "zh"): ThresholdRulePayload[] {
   return rows.map((row) => ({
     period_type: row.period_type,
     metric_type: row.metric_type,
-    threshold_value: Number(row.threshold_value || "0"),
+    threshold_value: parseThresholdValue(row, language),
     threshold_unit: row.threshold_unit,
     enabled: row.enabled,
   }));
+}
+
+function parseThresholdValue(row: ThresholdFormRow, language: Language) {
+  const rawValue = row.threshold_value.trim();
+  const value = Number(rawValue || "0");
+
+  if ((row.enabled || rawValue !== "") && (!Number.isFinite(value) || value <= 0)) {
+    throw new Error(translate(language, "thresholdInvalidValue"));
+  }
+
+  return value;
 }
 
 export function toThresholdFormRows(
@@ -99,10 +110,36 @@ export function toThresholdFormRows(
   });
 }
 
-export function safeParseHeaders(value: string): Record<string, string> {
+export function safeParseHeaders(value: string, language: Language = "zh"): Record<string, string> {
   try {
     const parsed = JSON.parse(value) as Record<string, string>;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(translate(language, "notificationsHeadersInvalidObject"));
+    }
+
+    Object.entries(parsed).forEach(([key, headerValue]) => {
+      if (typeof headerValue !== "string") {
+        throw new Error(translate(language, "notificationsHeadersInvalidValue", { key }));
+      }
+    });
+
+    return parsed;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(translate(language, "notificationsHeadersInvalidJson"));
+    }
+
+    if (error instanceof Error && error.message) {
+      throw error;
+    }
+
+    throw new Error(translate(language, "notificationsHeadersInvalidJson"));
+  }
+}
+
+export function tryParseHeaders(value: string): Record<string, string> {
+  try {
+    return safeParseHeaders(value);
   } catch {
     return {};
   }

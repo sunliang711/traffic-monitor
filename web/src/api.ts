@@ -4,6 +4,23 @@ export type ApiResponse<T> = {
   message: string;
 };
 
+type QueryValue = string | number | boolean | null | undefined;
+
+export function withQuery(path: string, params: Record<string, QueryValue>) {
+  const search = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === "") {
+      return;
+    }
+
+    search.set(key, String(value));
+  });
+
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: "include",

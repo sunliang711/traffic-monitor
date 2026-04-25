@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { del, get, patch, post, put } from "./api";
+import { del, get, patch, post, put, withQuery } from "./api";
 import OverviewTab from "./components/OverviewTab";
 import { useI18n } from "./lib/i18n";
 import type {
@@ -61,6 +61,15 @@ const emptyMachineForm = (): MachineFormState => ({
   remark: "",
 });
 
+const listPageSize = 50;
+
+type ProtectedDataLoadOptions = {
+  samplesPage?: number;
+  sampleMachineID?: number | null;
+  alertsPage?: number;
+  alertMachineID?: number | null;
+};
+
 function App() {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
@@ -82,13 +91,16 @@ function App() {
 
   const [sshKeys, setSSHKeys] = useState<SSHKey[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
-  const [globalThresholds, setGlobalThresholds] = useState<ThresholdRule[]>([]);
-  const [machineThresholds, setMachineThresholds] = useState<ThresholdRule[]>([]);
   const [notificationChannels, setNotificationChannels] = useState<NotificationChannel[]>([]);
   const [samples, setSamples] = useState<TrafficSample[]>([]);
+  const [samplesTotal, setSamplesTotal] = useState(0);
+  const [samplesPage, setSamplesPage] = useState(1);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [alertsTotal, setAlertsTotal] = useState(0);
+  const [alertsPage, setAlertsPage] = useState(1);
 
-  const [selectedMachineID, setSelectedMachineID] = useState<number | null>(null);
+  const [selectedThresholdMachineID, setSelectedThresholdMachineID] = useState<number | null>(null);
+  const [selectedSampleMachineID, setSelectedSampleMachineID] = useState<number | null>(null);
   const [selectedAlertMachineID, setSelectedAlertMachineID] = useState<number | null>(null);
   const [editingMachineID, setEditingMachineID] = useState<number | null>(null);
   const [machineForm, setMachineForm] = useState<MachineFormState>(emptyMachineForm());
@@ -125,9 +137,37 @@ function App() {
   );
 
   const selectedMachine = useMemo(
-    () => machines.find((machine) => machine.id === selectedMachineID) ?? null,
-    [machines, selectedMachineID],
+    () => machines.find((machine) => machine.id === selectedThresholdMachineID) ?? null,
+    [machines, selectedThresholdMachineID],
   );
+  const enabledMachineCount = useMemo(
+    () => machines.filter((machine) => machine.collect_enabled).length,
+    [machines],
+  );
+  const activeNotificationCount = useMemo(
+    () => notificationChannels.filter((channel) => channel.enabled).length,
+    [notificationChannels],
+  );
+  const pageDescription = useMemo(() => {
+    switch (activeTab) {
+      case "overview":
+        return t("dashboardTagline");
+      case "machines":
+        return t("machinesPageDescription");
+      case "sshKeys":
+        return t("sshKeysPageDescription");
+      case "thresholds":
+        return t("thresholdsPageDescription");
+      case "notifications":
+        return t("notificationsPageDescription");
+      case "samples":
+        return t("samplesPageDescription");
+      case "alerts":
+        return t("alertsPageDescription");
+      default:
+        return t("dashboardDescription");
+    }
+  }, [activeTab, t]);
 
   useEffect(() => {
     void bootstrap();
@@ -142,12 +182,12 @@ function App() {
 
   useEffect(() => {
     setMachineThresholdsSaved(true);
-    if (!selectedMachineID || !profile) {
+    if (!selectedThresholdMachineID || !profile) {
       setMachineThresholdForm(emptyThresholdRows());
       return;
     }
-    void loadMachineThresholds(selectedMachineID);
-  }, [selectedMachineID, profile]);
+    void loadMachineThresholds(selectedThresholdMachineID);
+  }, [selectedThresholdMachineID, profile]);
 
   async function bootstrap() {
     try {
@@ -162,14 +202,63 @@ function App() {
   async function loadPublicData() {
     try {
       const [globalRules] = await Promise.all([get<ThresholdRule[]>("/api/v1/thresholds/global")]);
-      setGlobalThresholds(globalRules);
       setGlobalThresholdForm(toThresholdFormRows(globalRules));
     } catch (loadError) {
       setError(toErrorMessage(loadError, language));
     }
   }
 
-  async function loadProtectedData() {
+  function trafficSamplesPath(page: number, machineID: number | null) {
+    return withQuery("/api/v1/traffic-samples", {
+      machine_id: machineID,
+      page,
+      page_size: listPageSize,
+    });
+  }
+
+  function alertsPath(page: number, machineID: number | null) {
+    return withQuery("/api/v1/alerts", {
+      machine_id: machineID,
+      page,
+      page_size: listPageSize,
+    });
+  }
+
+  async function loadSamplesPage(page = samplesPage, machineID = selectedSampleMachineID) {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await get<TrafficSampleList>(trafficSamplesPath(page, machineID));
+      setSamples(response.items);
+      setSamplesTotal(response.total);
+    } catch (loadError) {
+      setError(toErrorMessage(loadError, language));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadAlertsPage(page = alertsPage, machineID = selectedAlertMachineID) {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await get<AlertList>(alertsPath(page, machineID));
+      setAlerts(response.items);
+      setAlertsTotal(response.total);
+    } catch (loadError) {
+      setError(toErrorMessage(loadError, language));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadProtectedData(options: ProtectedDataLoadOptions = {}) {
+    const nextSamplesPage = options.samplesPage ?? samplesPage;
+    const nextSampleMachineID =
+      options.sampleMachineID !== undefined ? options.sampleMachineID : selectedSampleMachineID;
+    const nextAlertsPage = options.alertsPage ?? alertsPage;
+    const nextAlertMachineID = options.alertMachineID !== undefined ? options.alertMachineID : selectedAlertMachineID;
+
     setBusy(true);
     setError("");
     try {
@@ -178,20 +267,21 @@ function App() {
         get<Machine[]>("/api/v1/machines"),
         get<ThresholdRule[]>("/api/v1/thresholds/global"),
         get<NotificationChannel[]>("/api/v1/notification-channels"),
-        get<TrafficSampleList>("/api/v1/traffic-samples"),
-        get<AlertList>("/api/v1/alerts"),
+        get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID)),
+        get<AlertList>(alertsPath(nextAlertsPage, nextAlertMachineID)),
       ]);
 
       setSSHKeys(sshKeysResp);
       setMachines(machinesResp);
-      setGlobalThresholds(globalRules);
       setGlobalThresholdForm(toThresholdFormRows(globalRules));
       setNotificationChannels(channelsResp);
       syncChannelForms(channelsResp);
       setSamples(samplesResp.items);
+      setSamplesTotal(samplesResp.total);
       setAlerts(alertsResp.items);
+      setAlertsTotal(alertsResp.total);
 
-      setSelectedMachineID((currentSelectedMachineID) => {
+      setSelectedThresholdMachineID((currentSelectedMachineID) => {
         if (currentSelectedMachineID === null) {
           return null;
         }
@@ -200,6 +290,16 @@ function App() {
           ? currentSelectedMachineID
           : machinesResp[0]?.id ?? null;
       });
+      setSelectedSampleMachineID((currentSelectedMachineID) =>
+        currentSelectedMachineID && !machinesResp.some((machine) => machine.id === currentSelectedMachineID)
+          ? null
+          : currentSelectedMachineID,
+      );
+      setSelectedAlertMachineID((currentSelectedMachineID) =>
+        currentSelectedMachineID && !machinesResp.some((machine) => machine.id === currentSelectedMachineID)
+          ? null
+          : currentSelectedMachineID,
+      );
     } catch (loadError) {
       setError(toErrorMessage(loadError, language));
     } finally {
@@ -210,7 +310,6 @@ function App() {
   async function loadMachineThresholds(machineID: number) {
     try {
       const rules = await get<ThresholdRule[]>(`/api/v1/machines/${machineID}/thresholds`);
-      setMachineThresholds(rules);
       setMachineThresholdForm(toThresholdFormRows(rules));
     } catch (loadError) {
       setError(toErrorMessage(loadError, language));
@@ -361,11 +460,29 @@ function App() {
 
   async function handleDeleteMachine(id: number) {
     await submitAction(async () => {
+      const nextSampleMachineID = selectedSampleMachineID === id ? null : selectedSampleMachineID;
+      const nextAlertMachineID = selectedAlertMachineID === id ? null : selectedAlertMachineID;
+      const nextSamplesPage = selectedSampleMachineID === id ? 1 : samplesPage;
+      const nextAlertsPage = selectedAlertMachineID === id ? 1 : alertsPage;
+
       await del<null>(`/api/v1/machines/${id}`);
-      if (selectedMachineID === id) {
-        setSelectedMachineID(null);
+      if (selectedThresholdMachineID === id) {
+        setSelectedThresholdMachineID(null);
       }
-      await loadProtectedData();
+      if (selectedSampleMachineID === id) {
+        setSelectedSampleMachineID(null);
+        setSamplesPage(1);
+      }
+      if (selectedAlertMachineID === id) {
+        setSelectedAlertMachineID(null);
+        setAlertsPage(1);
+      }
+      await loadProtectedData({
+        sampleMachineID: nextSampleMachineID,
+        samplesPage: nextSamplesPage,
+        alertMachineID: nextAlertMachineID,
+        alertsPage: nextAlertsPage,
+      });
       setToast(t("machineDeleteSuccess"));
     });
   }
@@ -382,7 +499,7 @@ function App() {
     event.preventDefault();
     await submitAction(async () => {
       await put<null, { rules: ReturnType<typeof toThresholdPayloads> }>("/api/v1/thresholds/global", {
-        rules: toThresholdPayloads(globalThresholdForm),
+        rules: toThresholdPayloads(globalThresholdForm, language),
       });
       await loadProtectedData();
       setGlobalThresholdsSaved(true);
@@ -392,19 +509,19 @@ function App() {
 
   async function handleSaveMachineThresholds(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedMachineID) {
+    if (!selectedThresholdMachineID) {
       setError(t("selectMachineFirst"));
       return;
     }
 
     await submitAction(async () => {
       await put<null, { rules: ReturnType<typeof toThresholdPayloads> }>(
-        `/api/v1/machines/${selectedMachineID}/thresholds`,
+        `/api/v1/machines/${selectedThresholdMachineID}/thresholds`,
         {
-          rules: toThresholdPayloads(machineThresholdForm),
+          rules: toThresholdPayloads(machineThresholdForm, language),
         },
       );
-      await loadMachineThresholds(selectedMachineID);
+      await loadMachineThresholds(selectedThresholdMachineID);
       setMachineThresholdsSaved(true);
       setToast(t("machineThresholdSaveSuccess"));
     });
@@ -413,6 +530,7 @@ function App() {
   async function handleSaveWebhook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitAction(async () => {
+      const parsedHeaders = safeParseHeaders(webhookForm.headersText, language);
       await put<
         null,
         { enabled: boolean; method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string }
@@ -420,9 +538,10 @@ function App() {
         enabled: webhookForm.enabled,
         method: webhookForm.method,
         url: webhookForm.url,
-        headers: safeParseHeaders(webhookForm.headersText),
+        headers: parsedHeaders,
         body: webhookForm.bodyText,
       });
+      await loadProtectedData();
       setWebhookSaved(true);
       setToast(t("webhookSaveSuccess"));
     });
@@ -430,7 +549,7 @@ function App() {
 
   async function handleTestWebhook() {
     await submitAction(async () => {
-      const parsedHeaders = safeParseHeaders(webhookForm.headersText);
+      const parsedHeaders = safeParseHeaders(webhookForm.headersText, language);
       const response = await post<
         WebhookTestResponse,
         { method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string }
@@ -492,7 +611,9 @@ function App() {
         delete_samples: true,
         delete_alerts: true,
       });
-      await loadProtectedData();
+      setSamplesPage(1);
+      setAlertsPage(1);
+      await loadProtectedData({ samplesPage: 1, alertsPage: 1 });
       setToast(t("cleanupHistoryDone", { samples: response.deleted_samples, alerts: response.deleted_alerts }));
     });
   }
@@ -534,6 +655,28 @@ function App() {
     setTelegramSaved(false);
   }
 
+  async function handleSelectSampleMachine(machineID: number | null) {
+    setSelectedSampleMachineID(machineID);
+    setSamplesPage(1);
+    await loadSamplesPage(1, machineID);
+  }
+
+  async function handleSamplesPageChange(page: number) {
+    setSamplesPage(page);
+    await loadSamplesPage(page, selectedSampleMachineID);
+  }
+
+  async function handleSelectAlertMachine(machineID: number | null) {
+    setSelectedAlertMachineID(machineID);
+    setAlertsPage(1);
+    await loadAlertsPage(1, machineID);
+  }
+
+  async function handleAlertsPageChange(page: number) {
+    setAlertsPage(page);
+    await loadAlertsPage(page, selectedAlertMachineID);
+  }
+
   async function submitAction(action: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -553,7 +696,7 @@ function App() {
         <section className="panel auth-panel">
           <p className="eyebrow">traffic-monitor</p>
           <div className="panel-header-inline auth-header">
-            <div>
+            <div className="auth-copy">
               <h1 className="panel-title">{t("loginTitle")}</h1>
               <p className="muted">{t("loginDescription")}</p>
             </div>
@@ -605,11 +748,23 @@ function App() {
   return (
     <main className="console-shell">
       <aside className="sidebar">
-        <div>
-          <p className="eyebrow">traffic-monitor</p>
-          <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
-          <p className="muted">{t("currentAdmin", { username: profile.username })}</p>
-        </div>
+        <section className="brand-panel">
+          <div className="brand-copy">
+            <p className="eyebrow">traffic-monitor</p>
+            <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
+            <p className="muted">{t("currentAdmin", { username: profile.username })}</p>
+          </div>
+          <div className="brand-metrics">
+            <div>
+              <span>{t("overviewEnabledMachines")}</span>
+              <strong>{enabledMachineCount}</strong>
+            </div>
+            <div>
+              <span>{t("overviewNotificationsLabel")}</span>
+              <strong>{activeNotificationCount}</strong>
+            </div>
+          </div>
+        </section>
 
         <div className="language-switcher" aria-label={t("languageSwitcherLabel")}>
           <button
@@ -646,12 +801,13 @@ function App() {
       </aside>
 
       <section className="content">
-        <header className="content-header">
-          <div>
+        <header className="content-hero">
+          <div className="content-hero-copy">
+            <p className="eyebrow">{tabTitle(activeTab, language)}</p>
             <h2>{tabTitle(activeTab, language)}</h2>
-            <p className="muted">{t("dashboardDescription")}</p>
+            <p>{pageDescription}</p>
           </div>
-          <div className="header-actions">
+          <div className="content-hero-actions">
             <button className="secondary-button" onClick={() => void loadProtectedData()} type="button">
               {t("refresh")}
             </button>
@@ -664,9 +820,13 @@ function App() {
           </div>
         </header>
 
-        {toast ? <div className="message success">{toast}</div> : null}
+        {toast ? (
+          <div className="message success elevated" role="status" aria-live="polite">
+            {toast}
+          </div>
+        ) : null}
         {error ? (
-          <div className={`message ${isSSHKeyMismatchError ? "warning" : "error"}`}>
+          <div className={`message elevated ${isSSHKeyMismatchError ? "warning" : "error"}`} role="alert">
             {isSSHKeyMismatchError ? (
               <>
                 <strong>{t("sshKeyMismatchTitle")}</strong>
@@ -677,7 +837,11 @@ function App() {
             )}
           </div>
         ) : null}
-        {busy ? <div className="message info">{t("processingRequest")}</div> : null}
+        {busy ? (
+          <div className="message info elevated" role="status" aria-live="polite">
+            {t("processingRequest")}
+          </div>
+        ) : null}
 
         <Routes>
           <Route path="/" element={<Navigate replace to="/overview" />} />
@@ -688,8 +852,8 @@ function App() {
                 sshKeys={sshKeys}
                 machines={machines}
                 notificationChannels={notificationChannels}
-                samples={samples}
-                alerts={alerts}
+                samplesTotal={samplesTotal}
+                alertsTotal={alertsTotal}
                 collectResults={collectResults}
                 onNavigate={(tab) => navigate(tabPath(tab as TabKey))}
               />
@@ -746,10 +910,10 @@ function App() {
                 machineThresholdForm={machineThresholdForm}
                 globalThresholdsSaved={globalThresholdsSaved}
                 machineThresholdsSaved={machineThresholdsSaved}
-                selectedMachineID={selectedMachineID}
+                selectedMachineID={selectedThresholdMachineID}
                 selectedMachine={selectedMachine}
                 machineOptions={machineOptions}
-                onSelectMachine={setSelectedMachineID}
+                onSelectMachine={setSelectedThresholdMachineID}
                 onChangeGlobalThresholdForm={(rows) => {
                   setGlobalThresholdForm(rows);
                   setGlobalThresholdsSaved(false);
@@ -786,11 +950,16 @@ function App() {
             path="/samples"
             element={
               <SamplesPage
-                selectedMachineID={selectedMachineID}
+                busy={busy}
+                selectedMachineID={selectedSampleMachineID}
                 machineOptions={machineOptions}
                 samples={samples}
+                total={samplesTotal}
+                page={samplesPage}
+                pageSize={listPageSize}
                 collectResults={collectResults}
-                onSelectMachine={setSelectedMachineID}
+                onSelectMachine={(machineID) => void handleSelectSampleMachine(machineID)}
+                onPageChange={(page) => void handleSamplesPageChange(page)}
                 onCollectCurrentMachine={(machineID) => void handleCollectNow(machineID)}
               />
             }
@@ -799,10 +968,15 @@ function App() {
             path="/alerts"
             element={
               <AlertsPage
+                busy={busy}
                 alerts={alerts}
+                total={alertsTotal}
+                page={alertsPage}
+                pageSize={listPageSize}
                 machineOptions={machineOptions}
                 selectedMachineID={selectedAlertMachineID}
-                onSelectMachine={setSelectedAlertMachineID}
+                onSelectMachine={(machineID) => void handleSelectAlertMachine(machineID)}
+                onPageChange={(page) => void handleAlertsPageChange(page)}
               />
             }
           />

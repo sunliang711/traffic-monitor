@@ -23,9 +23,16 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
   const { t } = useI18n();
 
   return (
-    <div className="grid two-columns">
-      <section className="panel">
-        <h3 className="panel-title">{t("thresholdsGlobalTitle")}</h3>
+    <div className="page-stack">
+      <div className="grid dashboard-columns">
+      <section className="panel section-panel">
+        <div className="section-intro">
+          <div>
+            <p className="section-kicker">{t("thresholdsGlobalTitle")}</p>
+            <h3 className="panel-title">{t("thresholdsGlobalTitle")}</h3>
+          </div>
+          <p className="section-description">{t("thresholdsGlobalDescription")}</p>
+        </div>
         <form onSubmit={props.onSaveGlobalThresholds}>
           <ThresholdEditor rows={props.globalThresholdForm} onChange={props.onChangeGlobalThresholdForm} />
           <button className="primary-button" disabled={props.busy || props.globalThresholdsSaved} type="submit">
@@ -34,9 +41,15 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
         </form>
       </section>
 
-      <section className="panel">
+      <section className="panel section-panel">
+        <div className="section-intro">
+          <div>
+            <p className="section-kicker">{t("thresholdsMachineTitle")}</p>
+            <h3 className="panel-title">{t("thresholdsMachineTitle")}</h3>
+          </div>
+          <p className="section-description">{t("thresholdsMachineDescription")}</p>
+        </div>
         <div className="panel-header-inline">
-          <h3 className="panel-title">{t("thresholdsMachineTitle")}</h3>
           <select
             value={props.selectedMachineID ?? ""}
             onChange={(event) => props.onSelectMachine(event.target.value ? Number(event.target.value) : null)}
@@ -61,6 +74,7 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
           <p className="muted">{t("thresholdsSelectMachineFirst")}</p>
         )}
       </section>
+      </div>
     </div>
   );
 }
