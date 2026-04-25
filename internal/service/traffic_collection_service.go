@@ -87,6 +87,26 @@ func (service *TrafficCollectionService) CollectNow(ctx context.Context, machine
 	return dto.CollectNowResp{Results: results}, nil
 }
 
+func (service *TrafficCollectionService) ListEnabledMachines(ctx context.Context) ([]model.Machine, error) {
+	machines, err := service.machineStore.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list machines for scheduler: %w", err)
+	}
+
+	result := make([]model.Machine, 0, len(machines))
+	for _, machine := range machines {
+		if machine.CollectEnabled {
+			result = append(result, machine)
+		}
+	}
+
+	return result, nil
+}
+
+func (service *TrafficCollectionService) CollectMachine(ctx context.Context, machine *model.Machine) ([]model.TrafficSample, error) {
+	return service.collectMachineSamples(ctx, machine)
+}
+
 func (service *TrafficCollectionService) ListSamples(ctx context.Context, query dto.ListTrafficSamplesQuery) (dto.TrafficSampleListResp, error) {
 	samples, total, err := service.trafficSampleStore.List(ctx, repo.TrafficSampleFilter{
 		MachineID:  query.MachineID,

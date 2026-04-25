@@ -2,6 +2,12 @@
 name = "traffic-monitor"
 env = "development"
 
+[collector]
+enabled = true
+interval = "5m"
+max_workers = 5
+retry_times = 1
+
 [http]
 addr = ":8080"
 read_timeout = "10s"

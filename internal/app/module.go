@@ -43,6 +43,7 @@ func Run() {
 			service.NewSSHKeyService,
 			service.NewThresholdService,
 			service.NewTrafficCollectionService,
+			service.NewTrafficScheduler,
 			middleware.NewAuthMiddleware,
 			handler.NewAuthHandler,
 			handler.NewHealthHandler,
@@ -55,6 +56,7 @@ func Run() {
 			bootstrap.RegisterDatabaseLifecycle,
 			bootstrap.RegisterAdminBootstrap,
 			bootstrap.RegisterHTTPServer,
+			service.RegisterTrafficScheduler,
 			handler.RegisterRoutes,
 		),
 	)

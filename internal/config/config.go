@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	App       AppConfig       `mapstructure:"app"`
+	Collector CollectorConfig `mapstructure:"collector"`
 	HTTP      HTTPConfig      `mapstructure:"http"`
 	Database  DatabaseConfig  `mapstructure:"database"`
 	Log       LogConfig       `mapstructure:"log"`
@@ -19,6 +20,13 @@ type Config struct {
 type AppConfig struct {
 	Name string `mapstructure:"name"`
 	Env  string `mapstructure:"env"`
+}
+
+type CollectorConfig struct {
+	Enabled    bool          `mapstructure:"enabled"`
+	Interval   time.Duration `mapstructure:"interval"`
+	MaxWorkers int           `mapstructure:"max_workers"`
+	RetryTimes int           `mapstructure:"retry_times"`
 }
 
 type HTTPConfig struct {
@@ -69,6 +77,18 @@ func NewConfig() (Config, error) {
 func (cfg Config) Validate() error {
 	if cfg.HTTP.Addr == "" {
 		return fmt.Errorf("http.addr is required")
+	}
+
+	if cfg.Collector.Interval <= 0 {
+		return fmt.Errorf("collector.interval must be greater than zero")
+	}
+
+	if cfg.Collector.MaxWorkers <= 0 {
+		return fmt.Errorf("collector.max_workers must be greater than zero")
+	}
+
+	if cfg.Collector.RetryTimes < 0 {
+		return fmt.Errorf("collector.retry_times must be greater than or equal to zero")
 	}
 
 	if cfg.Database.DSN == "" {
@@ -136,6 +156,10 @@ func (cfg Config) Validate() error {
 
 func ProvideAppConfig(cfg Config) AppConfig {
 	return cfg.App
+}
+
+func ProvideCollectorConfig(cfg Config) CollectorConfig {
+	return cfg.Collector
 }
 
 func ProvideHTTPConfig(cfg Config) HTTPConfig {
