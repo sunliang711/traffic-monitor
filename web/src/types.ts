@@ -43,6 +43,9 @@ export type NotificationChannel = {
   enabled: boolean;
   configured: boolean;
   url?: string;
+  method?: "GET" | "POST";
+  headers?: Record<string, string>;
+  body?: string;
   chat_id?: string;
   token_masked?: string;
 };
@@ -97,4 +100,12 @@ export type ConnectionTestResponse = {
   vnstat_ready: boolean;
   vnstat_version: string;
   status: string;
+};
+
+export type WebhookTestResponse = {
+  status_code: number;
+  body: string;
+  rendered_url?: string;
+  rendered_headers?: Record<string, string>;
+  rendered_body?: string;
 };

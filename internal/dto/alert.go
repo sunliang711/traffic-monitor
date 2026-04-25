@@ -28,8 +28,10 @@ type AlertListResp struct {
 
 type UpsertWebhookChannelReq struct {
 	Enabled bool              `json:"enabled"`
+	Method  string            `json:"method"`
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
 }
 
 type UpsertTelegramChannelReq struct {
@@ -39,10 +41,28 @@ type UpsertTelegramChannelReq struct {
 }
 
 type NotificationChannelResp struct {
-	ChannelType string `json:"channel_type"`
-	Enabled     bool   `json:"enabled"`
-	Configured  bool   `json:"configured"`
-	URL         string `json:"url,omitempty"`
-	ChatID      string `json:"chat_id,omitempty"`
-	TokenMasked string `json:"token_masked,omitempty"`
+	ChannelType string            `json:"channel_type"`
+	Enabled     bool              `json:"enabled"`
+	Configured  bool              `json:"configured"`
+	Method      string            `json:"method,omitempty"`
+	URL         string            `json:"url,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Body        string            `json:"body,omitempty"`
+	ChatID      string            `json:"chat_id,omitempty"`
+	TokenMasked string            `json:"token_masked,omitempty"`
+}
+
+type TestWebhookChannelReq struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+}
+
+type TestWebhookChannelResp struct {
+	StatusCode      int               `json:"status_code"`
+	Body            string            `json:"body"`
+	RenderedURL     string            `json:"rendered_url"`
+	RenderedHeaders map[string]string `json:"rendered_headers"`
+	RenderedBody    string            `json:"rendered_body"`
 }

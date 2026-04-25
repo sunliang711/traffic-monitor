@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -94,13 +97,51 @@ func (provider *stubThresholdProvider) ListEffectiveMachineRules(_ context.Conte
 	return provider.rules, nil
 }
 
+type stubAlertMachineStore struct {
+	machines map[uint]model.Machine
+}
+
+func (store *stubAlertMachineStore) GetByID(_ context.Context, machineID uint) (*model.Machine, error) {
+	machine, ok := store.machines[machineID]
+	if !ok {
+		return nil, errors.New("machine not found")
+	}
+
+	return &machine, nil
+}
+
 type stubHTTPClient struct {
 	statusCode int
 	body       string
 	err        error
+	doFunc     func(req *http.Request) (*http.Response, error)
+	requests   []*http.Request
 }
 
-func (client stubHTTPClient) Do(_ *http.Request) (*http.Response, error) {
+func cloneRequest(req *http.Request) *http.Request {
+	cloned := req.Clone(req.Context())
+	if req.Body == nil {
+		return cloned
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return cloned
+	}
+
+	_ = req.Body.Close()
+	req.Body = ioNopCloser{reader: strings.NewReader(string(body))}
+	cloned.Body = ioNopCloser{reader: strings.NewReader(string(body))}
+	return cloned
+}
+
+func (client *stubHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	client.requests = append(client.requests, cloneRequest(req))
+
+	if client.doFunc != nil {
+		return client.doFunc(req)
+	}
+
 	if client.err != nil {
 		return nil, client.err
 	}
@@ -134,7 +175,7 @@ func TestAlertServiceEvaluateSamplesDeduplicates(t *testing.T) {
 				{PeriodType: thresholdPeriodHourly, MetricType: thresholdMetricTotal, ThresholdMB: 100, Enabled: true},
 			},
 		},
-		httpClient: stubHTTPClient{statusCode: http.StatusOK, body: "ok"},
+		httpClient: &stubHTTPClient{statusCode: http.StatusOK, body: "ok"},
 		log:        zerolog.Nop(),
 	}
 
@@ -153,14 +194,14 @@ func TestAlertServiceEvaluateSamplesDeduplicates(t *testing.T) {
 	require.Equal(t, alertNotifyStatusSkipped, alertStore.list[0].NotifyStatus)
 }
 
-func TestAlertServiceSendsWebhook(t *testing.T) {
+func TestAlertServiceSendsWebhookPOST(t *testing.T) {
 	alertStore := &stubAlertStore{}
 	channelStore := &stubNotificationChannelStore{
 		channels: []model.NotificationChannel{
 			{
 				ChannelType: channelTypeWebhook,
 				Enabled:     true,
-				ConfigJSON:  `{"url":"https://example.com/hook","headers":{"X-Test":"1"}}`,
+				ConfigJSON:  `{"url":"https://example.com/hook?machine={{.machine_id}}&metric={{.metric_type}}","method":"POST","headers":{"X-Test":"{{.machine_id}}","X-Alert-Key":"{{.alert_key}}"},"body":"{\"machine_id\":{{.machine_id}},\"metric_type\":\"{{.metric_type}}\",\"actual_mb\":{{.actual_mb}},\"threshold_mb\":{{.threshold_mb}},\"bucket_time\":\"{{.bucket_time_rfc3339}}\"}"}`,
 			},
 		},
 	}
@@ -175,8 +216,25 @@ func TestAlertServiceSendsWebhook(t *testing.T) {
 				{PeriodType: thresholdPeriodDaily, MetricType: thresholdMetricUpload, ThresholdMB: 1, Enabled: true},
 			},
 		},
-		httpClient: stubHTTPClient{statusCode: http.StatusOK, body: "ok"},
-		log:        zerolog.Nop(),
+		httpClient: &stubHTTPClient{
+			doFunc: func(req *http.Request) (*http.Response, error) {
+				require.Equal(t, http.MethodPost, req.Method)
+				require.Equal(t, "2", req.Header.Get("X-Test"))
+				require.Equal(t, "2:daily:upload:1777075200", req.Header.Get("X-Alert-Key"))
+				require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+				require.Equal(t, "https://example.com/hook?machine=2&metric=upload", req.URL.String())
+
+				body, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				require.JSONEq(t, `{"machine_id":2,"metric_type":"upload","actual_mb":5,"threshold_mb":1,"bucket_time":"2026-04-25T00:00:00Z"}`, string(body))
+
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       ioNopCloser{reader: strings.NewReader("ok")},
+				}, nil
+			},
+		},
+		log: zerolog.Nop(),
 	}
 
 	samples := []model.TrafficSample{
@@ -191,6 +249,336 @@ func TestAlertServiceSendsWebhook(t *testing.T) {
 	require.NoError(t, service.EvaluateSamples(context.Background(), 2, samples))
 	require.Len(t, deliveryStore.deliveries, 1)
 	require.True(t, deliveryStore.deliveries[0].Success)
+}
+
+func TestAlertServiceSendsWebhookGET(t *testing.T) {
+	alertStore := &stubAlertStore{}
+	channelStore := &stubNotificationChannelStore{
+		channels: []model.NotificationChannel{
+			{
+				ChannelType: channelTypeWebhook,
+				Enabled:     true,
+				ConfigJSON:  `{"url":"https://example.com/hook?machine={{.machine_id}}&metric={{.metric_type}}&bucket={{.bucket_time_rfc3339}}","method":"GET","headers":{"X-Test":"{{.machine_id}}","X-Alert-Key":"{{.alert_key}}"}}`,
+			},
+		},
+	}
+	deliveryStore := &stubNotificationDeliveryStore{}
+
+	service := &AlertService{
+		alertStore:                alertStore,
+		notificationChannelStore:  channelStore,
+		notificationDeliveryStore: deliveryStore,
+		thresholdProvider: &stubThresholdProvider{
+			rules: []dto.ThresholdRuleResp{
+				{PeriodType: thresholdPeriodDaily, MetricType: thresholdMetricUpload, ThresholdMB: 1, Enabled: true},
+			},
+		},
+		httpClient: &stubHTTPClient{
+			doFunc: func(req *http.Request) (*http.Response, error) {
+				require.Equal(t, http.MethodGet, req.Method)
+				require.Equal(t, "2", req.Header.Get("X-Test"))
+				require.Equal(t, "2:daily:upload:1777075200", req.Header.Get("X-Alert-Key"))
+				require.Empty(t, req.Header.Get("Content-Type"))
+
+				parsedURL, err := url.Parse(req.URL.String())
+				require.NoError(t, err)
+				require.Equal(t, "2", parsedURL.Query().Get("machine"))
+				require.Equal(t, "upload", parsedURL.Query().Get("metric"))
+				require.Equal(t, "2026-04-25T00:00:00Z", parsedURL.Query().Get("bucket"))
+
+				if req.Body != nil {
+					body, err := io.ReadAll(req.Body)
+					require.NoError(t, err)
+					require.Empty(t, string(body))
+				}
+
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       ioNopCloser{reader: strings.NewReader("ok")},
+				}, nil
+			},
+		},
+		log: zerolog.Nop(),
+	}
+
+	samples := []model.TrafficSample{
+		{
+			MachineID:  2,
+			PeriodType: thresholdPeriodDaily,
+			BucketTime: time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC),
+			UploadMB:   5,
+		},
+	}
+
+	require.NoError(t, service.EvaluateSamples(context.Background(), 2, samples))
+	require.Len(t, deliveryStore.deliveries, 1)
+	require.True(t, deliveryStore.deliveries[0].Success)
+}
+
+func TestAlertServiceSupportsBareWebhookTemplateVariables(t *testing.T) {
+	alertStore := &stubAlertStore{}
+	channelStore := &stubNotificationChannelStore{
+		channels: []model.NotificationChannel{
+			{
+				ChannelType: channelTypeWebhook,
+				Enabled:     true,
+				ConfigJSON:  `{"url":"https://example.com/hook?machine={{machine_id}}&metric={{metric_type}}","method":"POST","headers":{"X-Test":"{{machine_id}}","X-Alert-Key":"{{alert_key}}"},"body":"{\"machine_id\":{{machine_id}},\"metric_type\":\"{{metric_type}}\",\"actual_mb\":{{actual_mb}},\"threshold_mb\":{{threshold_mb}},\"bucket_time\":\"{{bucket_time_rfc3339}}\"}"}`,
+			},
+		},
+	}
+	deliveryStore := &stubNotificationDeliveryStore{}
+
+	service := &AlertService{
+		alertStore:                alertStore,
+		notificationChannelStore:  channelStore,
+		notificationDeliveryStore: deliveryStore,
+		thresholdProvider: &stubThresholdProvider{
+			rules: []dto.ThresholdRuleResp{
+				{PeriodType: thresholdPeriodDaily, MetricType: thresholdMetricUpload, ThresholdMB: 1, Enabled: true},
+			},
+		},
+		httpClient: &stubHTTPClient{
+			doFunc: func(req *http.Request) (*http.Response, error) {
+				require.Equal(t, http.MethodPost, req.Method)
+				require.Equal(t, "2", req.Header.Get("X-Test"))
+				require.Equal(t, "2:daily:upload:1777075200", req.Header.Get("X-Alert-Key"))
+				require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+				require.Equal(t, "https://example.com/hook?machine=2&metric=upload", req.URL.String())
+
+				body, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				require.JSONEq(t, `{"machine_id":2,"metric_type":"upload","actual_mb":5,"threshold_mb":1,"bucket_time":"2026-04-25T00:00:00Z"}`, string(body))
+
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       ioNopCloser{reader: strings.NewReader("ok")},
+				}, nil
+			},
+		},
+		log: zerolog.Nop(),
+	}
+
+	samples := []model.TrafficSample{
+		{
+			MachineID:  2,
+			PeriodType: thresholdPeriodDaily,
+			BucketTime: time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC),
+			UploadMB:   5,
+		},
+	}
+
+	require.NoError(t, service.EvaluateSamples(context.Background(), 2, samples))
+	require.Len(t, deliveryStore.deliveries, 1)
+	require.True(t, deliveryStore.deliveries[0].Success)
+}
+
+func TestAlertServiceListNotificationChannelsIncludesWebhookTemplates(t *testing.T) {
+	service := &AlertService{
+		notificationChannelStore: &stubNotificationChannelStore{
+			channels: []model.NotificationChannel{
+				{
+					ChannelType: channelTypeWebhook,
+					Enabled:     true,
+					ConfigJSON:  `{"url":"https://example.com/hook?machine={{.machine_id}}","method":"POST","headers":{"X-Test":"{{.machine_id}}"},"body":"{\"machine_id\":\"{{.machine_id}}\"}"}`,
+				},
+				{
+					ChannelType: channelTypeTelegram,
+					Enabled:     true,
+					ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001"}`,
+				},
+			},
+		},
+		log: zerolog.Nop(),
+	}
+
+	channels, err := service.ListNotificationChannels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, channels, 2)
+
+	webhook := channels[0]
+	require.Equal(t, channelTypeWebhook, webhook.ChannelType)
+	require.True(t, webhook.Enabled)
+	require.True(t, webhook.Configured)
+	require.Equal(t, http.MethodPost, webhook.Method)
+	require.Equal(t, "https://example.com/hook?machine={{.machine_id}}", webhook.URL)
+	require.Equal(t, map[string]string{"X-Test": "{{.machine_id}}"}, webhook.Headers)
+	require.Equal(t, "{\"machine_id\":\"{{.machine_id}}\"}", webhook.Body)
+
+	telegram := channels[1]
+	require.Equal(t, channelTypeTelegram, telegram.ChannelType)
+	require.Equal(t, "10001", telegram.ChatID)
+	require.NotEmpty(t, telegram.TokenMasked)
+}
+
+func TestAlertServiceBuildWebhookTemplateDataIncludesMachineFields(t *testing.T) {
+	service := &AlertService{
+		machineStore: &stubAlertMachineStore{
+			machines: map[uint]model.Machine{
+				7: {
+					Name: "prod-api-01",
+					Host: "10.2.1.107",
+				},
+			},
+		},
+		log: zerolog.Nop(),
+	}
+
+	alert := &model.Alert{
+		MachineID:   7,
+		PeriodType:  thresholdPeriodDaily,
+		MetricType:  thresholdMetricTotal,
+		BucketTime:  time.Date(2026, 4, 25, 8, 0, 0, 0, time.UTC),
+		ThresholdMB: 1024,
+		ActualMB:    1536,
+		AlertKey:    "7:daily:total:1777104000",
+	}
+
+	data := service.buildWebhookTemplateData(context.Background(), alert)
+	require.Equal(t, uint(7), data["machine_id"])
+	require.Equal(t, "prod-api-01", data["machine_name"])
+	require.Equal(t, "10.2.1.107", data["machine_host"])
+	require.Equal(t, thresholdPeriodDaily, data["period_type"])
+	require.Equal(t, thresholdMetricTotal, data["metric_type"])
+	require.Equal(t, "7:daily:total:1777104000", data["alert_key"])
+}
+
+func TestAlertServiceRenderWebhookRequestIncludesMachineFields(t *testing.T) {
+	service := &AlertService{
+		machineStore: &stubAlertMachineStore{
+			machines: map[uint]model.Machine{
+				7: {
+					Name: "prod-api-01",
+					Host: "10.2.1.107",
+				},
+			},
+		},
+		log: zerolog.Nop(),
+	}
+
+	alert := &model.Alert{
+		MachineID:   7,
+		PeriodType:  thresholdPeriodDaily,
+		MetricType:  thresholdMetricTotal,
+		BucketTime:  time.Date(2026, 4, 25, 8, 0, 0, 0, time.UTC),
+		ThresholdMB: 1024,
+		ActualMB:    1536,
+		AlertKey:    "7:daily:total:1777104000",
+	}
+
+	req, previewJSON, err := service.renderWebhookRequest(context.Background(), `{"url":"https://example.com/hook?machine={{machine_name}}&host={{machine_host}}","method":"POST","headers":{"X-Machine-Name":"{{machine_name}}","X-Machine-Host":"{{machine_host}}"},"body":"{\"machine\":\"{{machine_name}}\",\"host\":\"{{machine_host}}\",\"metric\":\"{{metric_type}}\"}"}`, alert)
+	require.NoError(t, err)
+	require.Equal(t, http.MethodPost, req.Method)
+	require.Equal(t, "https://example.com/hook?machine=prod-api-01&host=10.2.1.107", req.URL.String())
+	require.Equal(t, "prod-api-01", req.Header.Get("X-Machine-Name"))
+	require.Equal(t, "10.2.1.107", req.Header.Get("X-Machine-Host"))
+
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"machine":"prod-api-01","host":"10.2.1.107","metric":"total"}`, string(body))
+
+	var preview struct {
+		Method  string            `json:"method"`
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+		Body    string            `json:"body"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(previewJSON), &preview))
+	require.Equal(t, http.MethodPost, preview.Method)
+	require.Equal(t, "https://example.com/hook?machine=prod-api-01&host=10.2.1.107", preview.URL)
+	require.Equal(t, map[string]string{
+		"X-Machine-Name": "prod-api-01",
+		"X-Machine-Host": "10.2.1.107",
+	}, preview.Headers)
+	require.JSONEq(t, `{"machine":"prod-api-01","host":"10.2.1.107","metric":"total"}`, preview.Body)
+}
+
+func TestAlertServiceUpsertWebhookChannelPersistsTemplates(t *testing.T) {
+	channelStore := &stubNotificationChannelStore{}
+	service := &AlertService{
+		notificationChannelStore: channelStore,
+		log:                      zerolog.Nop(),
+	}
+
+	err := service.UpsertWebhookChannel(context.Background(), dto.UpsertWebhookChannelReq{
+		Enabled: true,
+		Method:  "post",
+		URL:     "https://example.com/hook?machine={{.machine_id}}",
+		Headers: map[string]string{
+			"X-Test": "{{.machine_id}}",
+		},
+		Body: "{\"machine_id\":\"{{.machine_id}}\",\"metric\":\"{{.metric_type}}\"}",
+	})
+	require.NoError(t, err)
+	require.Len(t, channelStore.channels, 1)
+
+	channel := channelStore.channels[0]
+	require.Equal(t, channelTypeWebhook, channel.ChannelType)
+	require.True(t, channel.Enabled)
+
+	var cfg struct {
+		URL     string            `json:"url"`
+		Method  string            `json:"method"`
+		Headers map[string]string `json:"headers"`
+		Body    string            `json:"body"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(channel.ConfigJSON), &cfg))
+	require.Equal(t, "https://example.com/hook?machine={{.machine_id}}", cfg.URL)
+	require.Equal(t, http.MethodPost, cfg.Method)
+	require.Equal(t, map[string]string{"X-Test": "{{.machine_id}}"}, cfg.Headers)
+	require.Equal(t, "{\"machine_id\":\"{{.machine_id}}\",\"metric\":\"{{.metric_type}}\"}", cfg.Body)
+}
+
+func TestAlertServiceTestWebhookChannelExecutesRequest(t *testing.T) {
+	httpClient := &stubHTTPClient{
+		statusCode: http.StatusCreated,
+		body:       "accepted",
+	}
+	service := &AlertService{
+		httpClient: httpClient,
+		machineStore: &stubAlertMachineStore{
+			machines: map[uint]model.Machine{
+				1: {
+					Name: "prod-api-01",
+					Host: "10.2.1.107",
+				},
+			},
+		},
+		log: zerolog.Nop(),
+	}
+
+	response, err := service.TestWebhookChannel(context.Background(), dto.UpsertWebhookChannelReq{
+		Method: "POST",
+		URL:    "https://example.com/hook?machine={{machine_name}}&host={{machine_host}}",
+		Headers: map[string]string{
+			"X-Machine-Name": "{{machine_name}}",
+			"X-Machine-Host": "{{machine_host}}",
+		},
+		Body: "{\"machine_name\":\"{{machine_name}}\",\"machine_host\":\"{{machine_host}}\",\"metric\":\"{{metric_type}}\"}",
+	})
+	require.NoError(t, err)
+	require.Len(t, httpClient.requests, 1)
+
+	req := httpClient.requests[0]
+	require.Equal(t, http.MethodPost, req.Method)
+	require.Equal(t, "https://example.com/hook?machine=prod-api-01&host=10.2.1.107", req.URL.String())
+	require.Equal(t, "prod-api-01", req.Header.Get("X-Machine-Name"))
+	require.Equal(t, "10.2.1.107", req.Header.Get("X-Machine-Host"))
+	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	require.JSONEq(t, "{\"machine_name\":\"prod-api-01\",\"machine_host\":\"10.2.1.107\",\"metric\":\"total\"}", string(body))
+
+	var preview dto.TestWebhookChannelResp
+	require.NoError(t, json.Unmarshal([]byte(response), &preview))
+	require.Equal(t, http.StatusCreated, preview.StatusCode)
+	require.Equal(t, "accepted", preview.Body)
+	require.Equal(t, "https://example.com/hook?machine=prod-api-01&host=10.2.1.107", preview.RenderedURL)
+	require.Equal(t, map[string]string{
+		"X-Machine-Name": "prod-api-01",
+		"X-Machine-Host": "10.2.1.107",
+	}, preview.RenderedHeaders)
+	require.JSONEq(t, "{\"machine_name\":\"prod-api-01\",\"machine_host\":\"10.2.1.107\",\"metric\":\"total\"}", preview.RenderedBody)
 }
 
 func TestAlertServiceFailedNotification(t *testing.T) {
@@ -214,7 +602,7 @@ func TestAlertServiceFailedNotification(t *testing.T) {
 				{PeriodType: thresholdPeriodHourly, MetricType: thresholdMetricDownload, ThresholdMB: 10, Enabled: true},
 			},
 		},
-		httpClient: stubHTTPClient{err: errors.New("network failed")},
+		httpClient: &stubHTTPClient{err: errors.New("network failed")},
 		log:        zerolog.Nop(),
 	}
 

@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -24,6 +27,7 @@ func (handler *AlertHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup)
 	authenticatedGroup.GET("/alerts", handler.ListAlerts)
 	authenticatedGroup.GET("/notification-channels", handler.ListNotificationChannels)
 	authenticatedGroup.PUT("/notification-channels/webhook", handler.UpsertWebhookChannel)
+	authenticatedGroup.POST("/notification-channels/webhook/test", handler.TestWebhookChannel)
 	authenticatedGroup.PUT("/notification-channels/telegram", handler.UpsertTelegramChannel)
 }
 
@@ -61,11 +65,45 @@ func (handler *AlertHandler) UpsertWebhookChannel(ctx *gin.Context) {
 	}
 
 	if err := handler.alertService.UpsertWebhookChannel(ctx.Request.Context(), req); err != nil {
-		internalServerError(ctx)
+		handleAlertServiceError(ctx, err)
 		return
 	}
 
 	ctx.JSON(http.StatusOK, dto.Response{Code: http.StatusOK, Data: nil, Message: "success"})
+}
+
+func (handler *AlertHandler) TestWebhookChannel(ctx *gin.Context) {
+	var req dto.UpsertWebhookChannelReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		badRequest(ctx, "invalid request")
+		return
+	}
+
+	responseExcerpt, err := handler.alertService.TestWebhookChannel(ctx.Request.Context(), req)
+	if err != nil {
+		handleWebhookTestError(ctx, err)
+		return
+	}
+
+	var response dto.TestWebhookChannelResp
+	if err := json.Unmarshal([]byte(responseExcerpt), &response); err != nil {
+		ctx.JSON(http.StatusOK, dto.Response{
+			Code: http.StatusOK,
+			Data: dto.TestWebhookChannelResp{
+				StatusCode: http.StatusOK,
+				Body:       responseExcerpt,
+			},
+			Message: "success",
+		})
+		return
+	}
+
+	response.StatusCode = http.StatusOK
+	ctx.JSON(http.StatusOK, dto.Response{
+		Code:    http.StatusOK,
+		Data:    response,
+		Message: "success",
+	})
 }
 
 func (handler *AlertHandler) UpsertTelegramChannel(ctx *gin.Context) {
@@ -76,7 +114,7 @@ func (handler *AlertHandler) UpsertTelegramChannel(ctx *gin.Context) {
 	}
 
 	if err := handler.alertService.UpsertTelegramChannel(ctx.Request.Context(), req); err != nil {
-		internalServerError(ctx)
+		handleAlertServiceError(ctx, err)
 		return
 	}
 
@@ -115,4 +153,34 @@ func parseListAlertsQuery(ctx *gin.Context) (dto.ListAlertsQuery, error) {
 
 	query.PeriodType = ctx.Query("period_type")
 	return query, nil
+}
+
+func handleAlertServiceError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidNotificationChannel):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid notification channel config",
+		})
+	default:
+		internalServerError(ctx)
+	}
+}
+
+func handleWebhookTestError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidNotificationChannel):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid notification channel config",
+		})
+	default:
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: fmt.Sprintf("webhook test failed: %v", err),
+		})
+	}
 }

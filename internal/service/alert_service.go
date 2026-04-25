@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"text/template"
 	"time"
 
 	"traffic-monitor/internal/dto"
@@ -42,6 +43,10 @@ type NotificationChannelStore interface {
 	List(ctx context.Context) ([]model.NotificationChannel, error)
 }
 
+type AlertMachineStore interface {
+	GetByID(ctx context.Context, machineID uint) (*model.Machine, error)
+}
+
 type NotificationDeliveryStore interface {
 	Create(ctx context.Context, delivery *model.NotificationDelivery) error
 }
@@ -59,16 +64,18 @@ type AlertService struct {
 	notificationChannelStore  NotificationChannelStore
 	notificationDeliveryStore NotificationDeliveryStore
 	thresholdProvider         ThresholdRuleProvider
+	machineStore              AlertMachineStore
 	httpClient                NotificationHTTPClient
 	log                       zerolog.Logger
 }
 
-func NewAlertService(alertStore *repo.AlertRepo, notificationChannelStore *repo.NotificationChannelRepo, notificationDeliveryStore *repo.NotificationDeliveryRepo, thresholdProvider *ThresholdService, log zerolog.Logger) *AlertService {
+func NewAlertService(alertStore *repo.AlertRepo, notificationChannelStore *repo.NotificationChannelRepo, notificationDeliveryStore *repo.NotificationDeliveryRepo, thresholdProvider *ThresholdService, machineStore *repo.MachineRepo, log zerolog.Logger) *AlertService {
 	return &AlertService{
 		alertStore:                alertStore,
 		notificationChannelStore:  notificationChannelStore,
 		notificationDeliveryStore: notificationDeliveryStore,
 		thresholdProvider:         thresholdProvider,
+		machineStore:              machineStore,
 		httpClient:                &http.Client{Timeout: 10 * time.Second},
 		log:                       log,
 	}
@@ -205,40 +212,9 @@ func (service *AlertService) sendNotification(ctx context.Context, channel model
 }
 
 func (service *AlertService) sendWebhook(ctx context.Context, configJSON string, alert *model.Alert) (string, error) {
-	var cfg struct {
-		URL     string            `json:"url"`
-		Headers map[string]string `json:"headers"`
-	}
-
-	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
-		return "", fmt.Errorf("decode webhook config: %w", err)
-	}
-
-	if strings.TrimSpace(cfg.URL) == "" {
-		return "", ErrInvalidNotificationChannel
-	}
-
-	payload, err := json.Marshal(map[string]interface{}{
-		"machine_id":   alert.MachineID,
-		"period_type":  alert.PeriodType,
-		"metric_type":  alert.MetricType,
-		"bucket_time":  alert.BucketTime,
-		"threshold_mb": alert.ThresholdMB,
-		"actual_mb":    alert.ActualMB,
-		"alert_key":    alert.AlertKey,
-	})
+	req, _, err := service.renderWebhookRequest(ctx, configJSON, alert)
 	if err != nil {
-		return "", fmt.Errorf("marshal webhook payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.URL, bytes.NewReader(payload))
-	if err != nil {
-		return "", fmt.Errorf("build webhook request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	for key, value := range cfg.Headers {
-		req.Header.Set(key, value)
+		return "", err
 	}
 
 	resp, err := service.httpClient.Do(req)
@@ -346,14 +322,24 @@ func (service *AlertService) ListNotificationChannels(ctx context.Context) ([]dt
 		switch channel.ChannelType {
 		case channelTypeWebhook:
 			var cfg struct {
-				URL string `json:"url"`
+				URL     string            `json:"url"`
+				Method  string            `json:"method"`
+				Headers map[string]string `json:"headers"`
+				Body    string            `json:"body"`
 			}
 			_ = json.Unmarshal([]byte(channel.ConfigJSON), &cfg)
+			method := strings.ToUpper(strings.TrimSpace(cfg.Method))
+			if method == "" {
+				method = http.MethodPost
+			}
 			result = append(result, dto.NotificationChannelResp{
 				ChannelType: channel.ChannelType,
 				Enabled:     channel.Enabled,
 				Configured:  strings.TrimSpace(cfg.URL) != "",
+				Method:      method,
 				URL:         cfg.URL,
+				Headers:     cfg.Headers,
+				Body:        cfg.Body,
 			})
 		case channelTypeTelegram:
 			var cfg struct {
@@ -375,9 +361,16 @@ func (service *AlertService) ListNotificationChannels(ctx context.Context) ([]dt
 }
 
 func (service *AlertService) UpsertWebhookChannel(ctx context.Context, req dto.UpsertWebhookChannelReq) error {
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	if method == "" {
+		method = http.MethodPost
+	}
+
 	configJSON, err := json.Marshal(map[string]interface{}{
 		"url":     strings.TrimSpace(req.URL),
+		"method":  method,
 		"headers": req.Headers,
+		"body":    req.Body,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal webhook channel config: %w", err)
@@ -394,6 +387,82 @@ func (service *AlertService) UpsertWebhookChannel(ctx context.Context, req dto.U
 	}
 
 	return nil
+}
+
+func (service *AlertService) TestWebhookChannel(ctx context.Context, req dto.UpsertWebhookChannelReq) (string, error) {
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	if method == "" {
+		method = http.MethodPost
+	}
+	if method != http.MethodPost && method != http.MethodGet {
+		return "", ErrInvalidNotificationChannel
+	}
+
+	alert := &model.Alert{
+		MachineID:    1,
+		PeriodType:   thresholdPeriodHourly,
+		MetricType:   thresholdMetricTotal,
+		BucketTime:   time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
+		ThresholdMB:  1024,
+		ActualMB:     1536,
+		AlertKey:     "test:webhook:alert",
+		NotifyStatus: alertNotifyStatusPending,
+	}
+
+	configJSON, err := json.Marshal(map[string]interface{}{
+		"url":     strings.TrimSpace(req.URL),
+		"method":  method,
+		"headers": req.Headers,
+		"body":    req.Body,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal webhook test config: %w", err)
+	}
+
+	httpRequest, previewJSON, err := service.renderWebhookRequest(ctx, string(configJSON), alert)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := service.httpClient.Do(httpRequest)
+	if err != nil {
+		return "", fmt.Errorf("send webhook request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	if err != nil {
+		return "", fmt.Errorf("read webhook response: %w", err)
+	}
+
+	var preview struct {
+		Method  string            `json:"method"`
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+		Body    string            `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(previewJSON), &preview); err != nil {
+		return "", fmt.Errorf("decode webhook preview: %w", err)
+	}
+
+	resultJSON, err := json.Marshal(dto.TestWebhookChannelResp{
+		StatusCode:      resp.StatusCode,
+		Body:            string(responseBody),
+		RenderedURL:     preview.URL,
+		RenderedHeaders: preview.Headers,
+		RenderedBody:    preview.Body,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal webhook test response: %w", err)
+	}
+
+	if resp.StatusCode >= 300 {
+		return "", fmt.Errorf("webhook status %d: %s", resp.StatusCode, string(responseBody))
+	}
+
+	return string(resultJSON), nil
 }
 
 func (service *AlertService) UpsertTelegramChannel(ctx context.Context, req dto.UpsertTelegramChannelReq) error {
@@ -420,6 +489,178 @@ func (service *AlertService) UpsertTelegramChannel(ctx context.Context, req dto.
 
 func buildAlertKey(machineID uint, periodType string, metricType string, bucketTime time.Time) string {
 	return fmt.Sprintf("%d:%s:%s:%d", machineID, periodType, metricType, bucketTime.UTC().Unix())
+}
+
+func (service *AlertService) buildWebhookTemplateData(ctx context.Context, alert *model.Alert) map[string]interface{} {
+	machineName := "test-machine"
+	machineHost := "127.0.0.1"
+	if service.machineStore != nil && alert.MachineID != 0 {
+		machine, err := service.machineStore.GetByID(ctx, alert.MachineID)
+		if err == nil && machine != nil {
+			if strings.TrimSpace(machine.Name) != "" {
+				machineName = machine.Name
+			}
+			if strings.TrimSpace(machine.Host) != "" {
+				machineHost = machine.Host
+			}
+		}
+	}
+
+	return map[string]interface{}{
+		"machine_id":          alert.MachineID,
+		"machine_name":        machineName,
+		"machine_host":        machineHost,
+		"period_type":         alert.PeriodType,
+		"metric_type":         alert.MetricType,
+		"bucket_time":         alert.BucketTime,
+		"bucket_time_rfc3339": alert.BucketTime.UTC().Format(time.RFC3339),
+		"threshold_mb":        alert.ThresholdMB,
+		"actual_mb":           alert.ActualMB,
+		"alert_key":           alert.AlertKey,
+	}
+}
+
+func (service *AlertService) renderWebhookRequest(ctx context.Context, configJSON string, alert *model.Alert) (*http.Request, string, error) {
+	var cfg struct {
+		URL     string            `json:"url"`
+		Method  string            `json:"method"`
+		Headers map[string]string `json:"headers"`
+		Body    string            `json:"body"`
+	}
+
+	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+		return nil, "", fmt.Errorf("decode webhook config: %w", err)
+	}
+
+	if strings.TrimSpace(cfg.URL) == "" {
+		return nil, "", ErrInvalidNotificationChannel
+	}
+
+	method := strings.ToUpper(strings.TrimSpace(cfg.Method))
+	if method == "" {
+		method = http.MethodPost
+	}
+	if method != http.MethodPost && method != http.MethodGet {
+		return nil, "", ErrInvalidNotificationChannel
+	}
+
+	templateData := service.buildWebhookTemplateData(ctx, alert)
+
+	renderedURL, err := renderWebhookTemplate(cfg.URL, templateData)
+	if err != nil {
+		return nil, "", fmt.Errorf("render webhook url template: %w", err)
+	}
+
+	renderedHeaders, err := renderWebhookHeaders(cfg.Headers, templateData)
+	if err != nil {
+		return nil, "", fmt.Errorf("render webhook headers template: %w", err)
+	}
+
+	defaultPayload, err := json.Marshal(map[string]interface{}{
+		"machine_id":   alert.MachineID,
+		"machine_name": templateData["machine_name"],
+		"machine_host": templateData["machine_host"],
+		"period_type":  alert.PeriodType,
+		"metric_type":  alert.MetricType,
+		"bucket_time":  alert.BucketTime,
+		"threshold_mb": alert.ThresholdMB,
+		"actual_mb":    alert.ActualMB,
+		"alert_key":    alert.AlertKey,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal webhook payload: %w", err)
+	}
+
+	renderedBody := ""
+	var req *http.Request
+	if method == http.MethodGet {
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, renderedURL, nil)
+	} else {
+		requestBody := defaultPayload
+		if strings.TrimSpace(cfg.Body) != "" {
+			renderedBody, err = renderWebhookTemplate(cfg.Body, templateData)
+			if err != nil {
+				return nil, "", fmt.Errorf("render webhook body template: %w", err)
+			}
+			requestBody = []byte(renderedBody)
+		} else {
+			renderedBody = string(defaultPayload)
+		}
+
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, renderedURL, bytes.NewReader(requestBody))
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("build webhook request: %w", err)
+	}
+
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for key, value := range renderedHeaders {
+		req.Header.Set(key, value)
+	}
+
+	previewPayload, err := json.Marshal(map[string]interface{}{
+		"method":  method,
+		"url":     renderedURL,
+		"headers": renderedHeaders,
+		"body":    renderedBody,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal webhook preview: %w", err)
+	}
+
+	return req, string(previewPayload), nil
+}
+
+func renderWebhookTemplate(raw string, data map[string]interface{}) (string, error) {
+	normalizedTemplate := normalizeWebhookTemplate(raw)
+
+	tmpl, err := template.New("webhook").Option("missingkey=error").Parse(normalizedTemplate)
+	if err != nil {
+		return "", err
+	}
+
+	var rendered bytes.Buffer
+	if err := tmpl.Execute(&rendered, data); err != nil {
+		return "", err
+	}
+
+	return rendered.String(), nil
+}
+
+func normalizeWebhookTemplate(raw string) string {
+	replacer := strings.NewReplacer(
+		"{{machine_id}}", "{{.machine_id}}",
+		"{{machine_name}}", "{{.machine_name}}",
+		"{{machine_host}}", "{{.machine_host}}",
+		"{{period_type}}", "{{.period_type}}",
+		"{{metric_type}}", "{{.metric_type}}",
+		"{{bucket_time}}", "{{.bucket_time}}",
+		"{{bucket_time_rfc3339}}", "{{.bucket_time_rfc3339}}",
+		"{{threshold_mb}}", "{{.threshold_mb}}",
+		"{{actual_mb}}", "{{.actual_mb}}",
+		"{{alert_key}}", "{{.alert_key}}",
+	)
+
+	return replacer.Replace(raw)
+}
+
+func renderWebhookHeaders(headers map[string]string, data map[string]interface{}) (map[string]string, error) {
+	if len(headers) == 0 {
+		return map[string]string{}, nil
+	}
+
+	rendered := make(map[string]string, len(headers))
+	for key, value := range headers {
+		renderedValue, err := renderWebhookTemplate(value, data)
+		if err != nil {
+			return nil, fmt.Errorf("render header %q: %w", key, err)
+		}
+		rendered[key] = renderedValue
+	}
+
+	return rendered, nil
 }
 
 func trimMessage(message string) string {

@@ -10,6 +10,7 @@ import type {
   Machine,
   NotificationChannel,
   SSHKey,
+  WebhookTestResponse,
   ThresholdRule,
   TrafficSample,
   TrafficSampleList,
@@ -60,9 +61,19 @@ type ThresholdFormRow = {
 
 type WebhookFormState = {
   enabled: boolean;
+  method: "GET" | "POST";
   url: string;
   headersText: string;
+  bodyText: string;
 };
+
+type WebhookPreviewState = {
+  url: string;
+  headersText: string;
+  bodyText: string;
+};
+
+
 
 type TelegramFormState = {
   enabled: boolean;
@@ -138,10 +149,17 @@ function App() {
   const [sshGenerateForm, setSSHGenerateForm] = useState<SSHKeyGenerateState>({ name: "" });
   const [globalThresholdForm, setGlobalThresholdForm] = useState<ThresholdFormRow[]>(emptyThresholdRows());
   const [machineThresholdForm, setMachineThresholdForm] = useState<ThresholdFormRow[]>(emptyThresholdRows());
-  const [webhookForm, setWebhookForm] = useState<WebhookFormState>({ enabled: false, url: "", headersText: "{}" });
+  const [webhookForm, setWebhookForm] = useState<WebhookFormState>({
+    enabled: false,
+    method: "POST",
+    url: "",
+    headersText: "{}",
+    bodyText: "",
+  });
   const [telegramForm, setTelegramForm] = useState<TelegramFormState>({ enabled: false, botToken: "", chatID: "" });
   const [connectionResults, setConnectionResults] = useState<Record<number, ConnectionTestResponse>>({});
   const [collectResults, setCollectResults] = useState<CollectNowResponse["results"]>([]);
+  const [webhookPreview, setWebhookPreview] = useState<WebhookPreviewState | null>(null);
 
   const machineOptions = useMemo(
     () => machines.map((machine) => ({ value: machine.id, label: `${machine.name} (${machine.host})` })),
@@ -247,7 +265,10 @@ function App() {
     setWebhookForm((current) => ({
       ...current,
       enabled: webhook?.enabled ?? false,
-      url: webhook?.url ?? "",
+      method: webhook?.method ?? "POST",
+      url: webhook?.url ?? current.url,
+      headersText: webhook?.headers ? JSON.stringify(webhook.headers, null, 2) : current.headersText,
+      bodyText: webhook?.body ?? current.bodyText,
     }));
     setTelegramForm((current) => ({
       ...current,
@@ -398,16 +419,38 @@ function App() {
   async function handleSaveWebhook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitAction(async () => {
-      await put<null, { enabled: boolean; url: string; headers: Record<string, string> }>(
-        "/api/v1/notification-channels/webhook",
-        {
-          enabled: webhookForm.enabled,
-          url: webhookForm.url,
-          headers: safeParseHeaders(webhookForm.headersText),
-        },
-      );
-      await loadProtectedData();
+      await put<
+        null,
+        { enabled: boolean; method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string }
+      >("/api/v1/notification-channels/webhook", {
+        enabled: webhookForm.enabled,
+        method: webhookForm.method,
+        url: webhookForm.url,
+        headers: safeParseHeaders(webhookForm.headersText),
+        body: webhookForm.bodyText,
+      });
       setToast("Webhook 渠道已保存");
+    });
+  }
+
+  async function handleTestWebhook() {
+    await submitAction(async () => {
+      const parsedHeaders = safeParseHeaders(webhookForm.headersText);
+      const response = await post<
+        WebhookTestResponse,
+        { method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string }
+      >("/api/v1/notification-channels/webhook/test", {
+        method: webhookForm.method,
+        url: webhookForm.url,
+        headers: parsedHeaders,
+        body: webhookForm.bodyText,
+      });
+      setWebhookPreview({
+        url: response.rendered_url ?? renderWebhookPreviewTemplate(webhookForm.url),
+        headersText: JSON.stringify(response.rendered_headers ?? renderWebhookPreviewHeaders(parsedHeaders), null, 2),
+        bodyText: response.rendered_body ?? renderWebhookPreviewTemplate(webhookForm.bodyText),
+      });
+      setToast(response.body ? `Webhook 测试成功：${response.body}` : "Webhook 测试成功");
     });
   }
 
@@ -823,6 +866,18 @@ function App() {
                   <span>启用 Webhook</span>
                 </label>
                 <label className="field">
+                  <span>请求方式</span>
+                  <select
+                    value={webhookForm.method}
+                    onChange={(event) =>
+                      setWebhookForm((current) => ({ ...current, method: event.target.value as "GET" | "POST" }))
+                    }
+                  >
+                    <option value="POST">POST</option>
+                    <option value="GET">GET</option>
+                  </select>
+                </label>
+                <label className="field">
                   <span>URL</span>
                   <input
                     value={webhookForm.url}
@@ -831,18 +886,79 @@ function App() {
                   />
                 </label>
                 <label className="field full-width">
-                  <span>Headers(JSON)</span>
+                  <span>Headers(JSON 模板)</span>
                   <textarea
                     rows={5}
                     value={webhookForm.headersText}
                     onChange={(event) =>
                       setWebhookForm((current) => ({ ...current, headersText: event.target.value }))
                     }
+                    placeholder={`{
+  "Authorization": "Bearer {{alert_key}}",
+  "X-Metric": "{{metric_type}}",
+  "X-Machine-Name": "{{machine_name}}"
+}`}
                   />
                 </label>
-                <button className="primary-button" disabled={busy} type="submit">
-                  保存 Webhook
-                </button>
+                <label className="field full-width">
+                  <span>Body 模板</span>
+                  <textarea
+                    rows={8}
+                    value={webhookForm.bodyText}
+                    onChange={(event) =>
+                      setWebhookForm((current) => ({ ...current, bodyText: event.target.value }))
+                    }
+                    placeholder={`{
+  "machine_id": "{{machine_id}}",
+  "machine_name": "{{machine_name}}",
+  "machine_host": "{{machine_host}}",
+  "period_type": "{{period_type}}",
+  "metric_type": "{{metric_type}}",
+  "bucket_time": "{{bucket_time}}",
+  "threshold_mb": "{{threshold_mb}}",
+  "actual_mb": "{{actual_mb}}",
+  "alert_key": "{{alert_key}}"
+}`}
+                  />
+                </label>
+                <div className="card">
+                  <div className="card-header">
+                    <strong>可用变量</strong>
+                  </div>
+                  <p className="card-meta">
+                    URL、Headers、Body 都支持以下变量模板：
+                    <code> {"{{machine_id}}"}</code>
+                    <code> {"{{machine_name}}"}</code>
+                    <code> {"{{machine_host}}"}</code>
+                    <code> {"{{period_type}}"}</code>
+                    <code> {"{{metric_type}}"}</code>
+                    <code> {"{{bucket_time}}"}</code>
+                    <code> {"{{threshold_mb}}"}</code>
+                    <code> {"{{actual_mb}}"}</code>
+                    <code> {"{{alert_key}}"}</code>
+                  </p>
+                </div>
+                {webhookPreview ? (
+                  <div className="card">
+                    <div className="card-header">
+                      <strong>渲染预览</strong>
+                    </div>
+                    <p className="card-meta">URL</p>
+                    <pre className="code-block">{webhookPreview.url || "-"}</pre>
+                    <p className="card-meta">Headers</p>
+                    <pre className="code-block">{webhookPreview.headersText || "{}"}</pre>
+                    <p className="card-meta">Body</p>
+                    <pre className="code-block">{webhookPreview.bodyText || "-"}</pre>
+                  </div>
+                ) : null}
+                <div className="action-row">
+                  <button className="secondary-button" disabled={busy} onClick={() => void handleTestWebhook()} type="button">
+                    测试 Webhook
+                  </button>
+                  <button className="primary-button" disabled={busy} type="submit">
+                    保存 Webhook
+                  </button>
+                </div>
               </form>
             </section>
 
@@ -1162,6 +1278,27 @@ function safeParseHeaders(value: string): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function renderWebhookPreviewTemplate(value: string): string {
+  return [
+    ["{{machine_id}}", "1"],
+    ["{{machine_name}}", "test-machine"],
+    ["{{machine_host}}", "127.0.0.1"],
+    ["{{period_type}}", "hourly"],
+    ["{{metric_type}}", "total"],
+    ["{{bucket_time}}", "2026-04-25 12:00:00 +0000 UTC"],
+    ["{{bucket_time_rfc3339}}", "2026-04-25T12:00:00Z"],
+    ["{{threshold_mb}}", "1024"],
+    ["{{actual_mb}}", "1536"],
+    ["{{alert_key}}", "test:webhook:alert"],
+  ].reduce((result, [token, replacement]) => result.split(token).join(replacement), value);
+}
+
+function renderWebhookPreviewHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [key, renderWebhookPreviewTemplate(value)]),
+  );
 }
 
 function toErrorMessage(error: unknown): string {
