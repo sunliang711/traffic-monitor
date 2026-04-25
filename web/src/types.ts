@@ -75,6 +75,7 @@ export type AlertItem = {
   threshold_mb: number;
   actual_mb: number;
   notify_status: string;
+  notified_at?: string;
   created_at: string;
 };
 

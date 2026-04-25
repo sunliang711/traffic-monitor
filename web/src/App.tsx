@@ -160,6 +160,11 @@ function App() {
   const [connectionResults, setConnectionResults] = useState<Record<number, ConnectionTestResponse>>({});
   const [collectResults, setCollectResults] = useState<CollectNowResponse["results"]>([]);
   const [webhookPreview, setWebhookPreview] = useState<WebhookPreviewState | null>(null);
+  const [globalThresholdsSaved, setGlobalThresholdsSaved] = useState(true);
+  const [machineThresholdsSaved, setMachineThresholdsSaved] = useState(true);
+  const [webhookSaved, setWebhookSaved] = useState(true);
+  const [telegramSaved, setTelegramSaved] = useState(true);
+  const [machineFormSaved, setMachineFormSaved] = useState(true);
 
   const machineOptions = useMemo(
     () => machines.map((machine) => ({ value: machine.id, label: `${machine.name} (${machine.host})` })),
@@ -183,6 +188,7 @@ function App() {
   }, [profile]);
 
   useEffect(() => {
+    setMachineThresholdsSaved(false);
     if (!selectedMachineID || !profile) {
       setMachineThresholdForm(emptyThresholdRows());
       return;
@@ -266,16 +272,17 @@ function App() {
       ...current,
       enabled: webhook?.enabled ?? false,
       method: webhook?.method ?? "POST",
-      url: webhook?.url ?? current.url,
-      headersText: webhook?.headers ? JSON.stringify(webhook.headers, null, 2) : current.headersText,
-      bodyText: webhook?.body ?? current.bodyText,
+      url: webhook?.url ?? "",
+      headersText: webhook?.headers ? JSON.stringify(webhook.headers, null, 2) : "{}",
+      bodyText: webhook?.body ?? "",
     }));
-    setTelegramForm((current) => ({
-      ...current,
+    setWebhookSaved(true);
+    setTelegramForm({
       enabled: telegram?.enabled ?? false,
       chatID: telegram?.chat_id ?? "",
       botToken: "",
-    }));
+    });
+    setTelegramSaved(true);
   }
 
   async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
@@ -366,6 +373,7 @@ function App() {
       }
       setEditingMachineID(null);
       setMachineForm(emptyMachineForm());
+      setMachineFormSaved(true);
       await loadProtectedData();
     });
   }
@@ -396,6 +404,7 @@ function App() {
         rules: toThresholdPayloads(globalThresholdForm),
       });
       await loadProtectedData();
+      setGlobalThresholdsSaved(true);
       setToast("全局阈值已保存");
     });
   }
@@ -412,6 +421,7 @@ function App() {
         rules: toThresholdPayloads(machineThresholdForm),
       });
       await loadMachineThresholds(selectedMachineID);
+      setMachineThresholdsSaved(true);
       setToast("单机阈值已保存");
     });
   }
@@ -429,6 +439,7 @@ function App() {
         headers: safeParseHeaders(webhookForm.headersText),
         body: webhookForm.bodyText,
       });
+      setWebhookSaved(true);
       setToast("Webhook 渠道已保存");
     });
   }
@@ -467,6 +478,7 @@ function App() {
       );
       setTelegramForm((current) => ({ ...current, botToken: "" }));
       await loadProtectedData();
+      setTelegramSaved(true);
       setToast("Telegram 渠道已保存");
     });
   }
@@ -494,12 +506,14 @@ function App() {
       collectEnabled: machine.collect_enabled,
       remark: machine.remark,
     });
+    setMachineFormSaved(true);
     setActiveTab("machines");
   }
 
   function resetMachineForm() {
     setEditingMachineID(null);
     setMachineForm(emptyMachineForm());
+    setMachineFormSaved(true);
   }
 
   async function submitAction(action: () => Promise<void>) {
@@ -753,7 +767,7 @@ function App() {
                     onChange={(event) => updateMachineForm("remark", event.target.value)}
                   />
                 </label>
-                <button className="primary-button" disabled={busy} type="submit">
+                <button className="primary-button" disabled={busy || machineFormSaved} type="submit">
                   {editingMachineID ? "保存修改" : "创建机器"}
                 </button>
               </form>
@@ -816,8 +830,14 @@ function App() {
             <section className="panel">
               <h3 className="panel-title">全局阈值</h3>
               <form onSubmit={handleSaveGlobalThresholds}>
-                <ThresholdEditor rows={globalThresholdForm} onChange={setGlobalThresholdForm} />
-                <button className="primary-button" disabled={busy} type="submit">
+                <ThresholdEditor
+                  rows={globalThresholdForm}
+                  onChange={(rows) => {
+                    setGlobalThresholdForm(rows);
+                    setGlobalThresholdsSaved(false);
+                  }}
+                />
+                <button className="primary-button" disabled={busy || globalThresholdsSaved} type="submit">
                   保存全局阈值
                 </button>
               </form>
@@ -840,8 +860,14 @@ function App() {
               </div>
               {selectedMachine ? (
                 <form onSubmit={handleSaveMachineThresholds}>
-                  <ThresholdEditor rows={machineThresholdForm} onChange={setMachineThresholdForm} />
-                  <button className="primary-button" disabled={busy} type="submit">
+                  <ThresholdEditor
+                    rows={machineThresholdForm}
+                    onChange={(rows) => {
+                      setMachineThresholdForm(rows);
+                      setMachineThresholdsSaved(false);
+                    }}
+                  />
+                  <button className="primary-button" disabled={busy || machineThresholdsSaved} type="submit">
                     保存 {selectedMachine.name} 的阈值
                   </button>
                 </form>
@@ -860,7 +886,10 @@ function App() {
                 <label className="field checkbox-field">
                   <input
                     checked={webhookForm.enabled}
-                    onChange={(event) => setWebhookForm((current) => ({ ...current, enabled: event.target.checked }))}
+                    onChange={(event) => {
+                      setWebhookForm((current) => ({ ...current, enabled: event.target.checked }));
+                      setWebhookSaved(false);
+                    }}
                     type="checkbox"
                   />
                   <span>启用 Webhook</span>
@@ -869,9 +898,10 @@ function App() {
                   <span>请求方式</span>
                   <select
                     value={webhookForm.method}
-                    onChange={(event) =>
-                      setWebhookForm((current) => ({ ...current, method: event.target.value as "GET" | "POST" }))
-                    }
+                    onChange={(event) => {
+                      setWebhookForm((current) => ({ ...current, method: event.target.value as "GET" | "POST" }));
+                      setWebhookSaved(false);
+                    }}
                   >
                     <option value="POST">POST</option>
                     <option value="GET">GET</option>
@@ -881,7 +911,10 @@ function App() {
                   <span>URL</span>
                   <input
                     value={webhookForm.url}
-                    onChange={(event) => setWebhookForm((current) => ({ ...current, url: event.target.value }))}
+                    onChange={(event) => {
+                      setWebhookForm((current) => ({ ...current, url: event.target.value }));
+                      setWebhookSaved(false);
+                    }}
                     placeholder="https://example.com/hook"
                   />
                 </label>
@@ -890,9 +923,10 @@ function App() {
                   <textarea
                     rows={5}
                     value={webhookForm.headersText}
-                    onChange={(event) =>
-                      setWebhookForm((current) => ({ ...current, headersText: event.target.value }))
-                    }
+                    onChange={(event) => {
+                      setWebhookForm((current) => ({ ...current, headersText: event.target.value }));
+                      setWebhookSaved(false);
+                    }}
                     placeholder={`{
   "Authorization": "Bearer {{alert_key}}",
   "X-Metric": "{{metric_type}}",
@@ -905,9 +939,10 @@ function App() {
                   <textarea
                     rows={8}
                     value={webhookForm.bodyText}
-                    onChange={(event) =>
-                      setWebhookForm((current) => ({ ...current, bodyText: event.target.value }))
-                    }
+                    onChange={(event) => {
+                      setWebhookForm((current) => ({ ...current, bodyText: event.target.value }));
+                      setWebhookSaved(false);
+                    }}
                     placeholder={`{
   "machine_id": "{{machine_id}}",
   "machine_name": "{{machine_name}}",
@@ -955,7 +990,7 @@ function App() {
                   <button className="secondary-button" disabled={busy} onClick={() => void handleTestWebhook()} type="button">
                     测试 Webhook
                   </button>
-                  <button className="primary-button" disabled={busy} type="submit">
+                  <button className="primary-button" disabled={busy || webhookSaved} type="submit">
                     保存 Webhook
                   </button>
                 </div>
@@ -968,7 +1003,10 @@ function App() {
                 <label className="field checkbox-field">
                   <input
                     checked={telegramForm.enabled}
-                    onChange={(event) => setTelegramForm((current) => ({ ...current, enabled: event.target.checked }))}
+                    onChange={(event) => {
+                      setTelegramForm((current) => ({ ...current, enabled: event.target.checked }));
+                      setTelegramSaved(false);
+                    }}
                     type="checkbox"
                   />
                   <span>启用 Telegram</span>
@@ -977,7 +1015,10 @@ function App() {
                   <span>Bot Token</span>
                   <input
                     value={telegramForm.botToken}
-                    onChange={(event) => setTelegramForm((current) => ({ ...current, botToken: event.target.value }))}
+                    onChange={(event) => {
+                      setTelegramForm((current) => ({ ...current, botToken: event.target.value }));
+                      setTelegramSaved(false);
+                    }}
                     placeholder="仅保存时填写"
                   />
                 </label>
@@ -985,10 +1026,13 @@ function App() {
                   <span>Chat ID</span>
                   <input
                     value={telegramForm.chatID}
-                    onChange={(event) => setTelegramForm((current) => ({ ...current, chatID: event.target.value }))}
+                    onChange={(event) => {
+                      setTelegramForm((current) => ({ ...current, chatID: event.target.value }));
+                      setTelegramSaved(false);
+                    }}
                   />
                 </label>
-                <button className="primary-button" disabled={busy} type="submit">
+                <button className="primary-button" disabled={busy || telegramSaved} type="submit">
                   保存 Telegram
                 </button>
               </form>
@@ -1047,6 +1091,7 @@ function App() {
                     <th>上行</th>
                     <th>下行</th>
                     <th>总量</th>
+                    <th>采集时间</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1060,6 +1105,7 @@ function App() {
                         <td>{formatTrafficValue(sample.upload_mb)}</td>
                         <td>{formatTrafficValue(sample.download_mb)}</td>
                         <td>{formatTrafficValue(sample.total_mb)}</td>
+                        <td>{formatTime(sample.collected_at)}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -1096,10 +1142,11 @@ function App() {
                     <th>机器</th>
                     <th>周期</th>
                     <th>维度</th>
-                    <th>桶时间</th>
-                    <th>阈值(MB)</th>
-                    <th>实际(MB)</th>
+                    <th>告警周期</th>
+                    <th>阈值</th>
+                    <th>实际</th>
                     <th>通知状态</th>
+                    <th>通知时间</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1108,10 +1155,11 @@ function App() {
                       <td>{alert.machine_id}</td>
                       <td>{alert.period_type}</td>
                       <td>{alert.metric_type}</td>
-                      <td>{formatTime(alert.bucket_time)}</td>
-                      <td>{formatNumber(alert.threshold_mb)}</td>
-                      <td>{formatNumber(alert.actual_mb)}</td>
+                      <td>{formatAlertPeriod(alert.period_type, alert.bucket_time)}</td>
+                      <td>{formatTrafficValue(alert.threshold_mb)}</td>
+                      <td>{formatTrafficValue(alert.actual_mb)}</td>
                       <td>{alert.notify_status}</td>
+                      <td>{alert.notified_at ? formatTime(alert.notified_at) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1125,6 +1173,7 @@ function App() {
 
   function updateMachineForm<Key extends keyof MachineFormState>(key: Key, value: MachineFormState[Key]) {
     setMachineForm((current) => ({ ...current, [key]: value }));
+    setMachineFormSaved(false);
   }
 }
 
@@ -1326,6 +1375,25 @@ function formatTrafficValue(valueMB: number) {
   }
 
   return `${valueMB.toFixed(3)} MB`;
+}
+
+function formatAlertPeriod(periodType: string, bucketTime: string) {
+  const start = new Date(bucketTime);
+
+  if (Number.isNaN(start.getTime())) {
+    return bucketTime;
+  }
+
+  if (periodType === "hourly") {
+    const end = new Date(start.getTime() + 60 * 60 * 1000 - 1000);
+    return `${formatTime(bucketTime)} - ${end.toLocaleString("zh-CN", { hour12: false })}`;
+  }
+
+  if (periodType === "daily") {
+    return `${start.toLocaleDateString("zh-CN")} 全天`;
+  }
+
+  return formatTime(bucketTime);
 }
 
 function tabTitle(activeTab: TabKey) {

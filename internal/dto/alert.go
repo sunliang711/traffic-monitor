@@ -10,15 +10,16 @@ type ListAlertsQuery struct {
 }
 
 type AlertResp struct {
-	ID           uint      `json:"id"`
-	MachineID    uint      `json:"machine_id"`
-	PeriodType   string    `json:"period_type"`
-	MetricType   string    `json:"metric_type"`
-	BucketTime   time.Time `json:"bucket_time"`
-	ThresholdMB  float64   `json:"threshold_mb"`
-	ActualMB     float64   `json:"actual_mb"`
-	NotifyStatus string    `json:"notify_status"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID             uint       `json:"id"`
+	MachineID      uint       `json:"machine_id"`
+	PeriodType     string     `json:"period_type"`
+	MetricType     string     `json:"metric_type"`
+	BucketTime     time.Time  `json:"bucket_time"`
+	ThresholdMB    float64    `json:"threshold_mb"`
+	ActualMB       float64    `json:"actual_mb"`
+	NotifyStatus   string     `json:"notify_status"`
+	NotifiedAt     *time.Time `json:"notified_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 type AlertListResp struct {

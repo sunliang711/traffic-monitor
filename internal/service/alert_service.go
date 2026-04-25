@@ -49,6 +49,7 @@ type AlertMachineStore interface {
 
 type NotificationDeliveryStore interface {
 	Create(ctx context.Context, delivery *model.NotificationDelivery) error
+	GetLatestByAlertIDs(ctx context.Context, alertIDs []uint) (map[uint]model.NotificationDelivery, error)
 }
 
 type ThresholdRuleProvider interface {
@@ -96,7 +97,12 @@ func (service *AlertService) EvaluateSamples(ctx context.Context, machineID uint
 		ruleMap[thresholdRuleKey(rule.PeriodType, rule.MetricType)] = rule
 	}
 
+	now := time.Now().UTC()
 	for _, sample := range samples {
+		if !isCompletedAlertPeriod(sample, now) {
+			continue
+		}
+
 		if err := service.evaluateSample(ctx, sample, ruleMap); err != nil {
 			return err
 		}
@@ -290,8 +296,24 @@ func (service *AlertService) ListAlerts(ctx context.Context, query dto.ListAlert
 		return dto.AlertListResp{}, fmt.Errorf("list alerts: %w", err)
 	}
 
+	alertIDs := make([]uint, 0, len(alerts))
+	for _, alert := range alerts {
+		alertIDs = append(alertIDs, alert.ID)
+	}
+
+	latestDeliveries, err := service.notificationDeliveryStore.GetLatestByAlertIDs(ctx, alertIDs)
+	if err != nil {
+		return dto.AlertListResp{}, fmt.Errorf("list latest notification deliveries: %w", err)
+	}
+
 	items := make([]dto.AlertResp, 0, len(alerts))
 	for _, alert := range alerts {
+		var notifiedAt *time.Time
+		if delivery, ok := latestDeliveries[alert.ID]; ok {
+			deliveryCreatedAt := delivery.CreatedAt
+			notifiedAt = &deliveryCreatedAt
+		}
+
 		items = append(items, dto.AlertResp{
 			ID:           alert.ID,
 			MachineID:    alert.MachineID,
@@ -301,6 +323,7 @@ func (service *AlertService) ListAlerts(ctx context.Context, query dto.ListAlert
 			ThresholdMB:  alert.ThresholdMB,
 			ActualMB:     alert.ActualMB,
 			NotifyStatus: alert.NotifyStatus,
+			NotifiedAt:   notifiedAt,
 			CreatedAt:    alert.CreatedAt,
 		})
 	}
@@ -489,6 +512,22 @@ func (service *AlertService) UpsertTelegramChannel(ctx context.Context, req dto.
 
 func buildAlertKey(machineID uint, periodType string, metricType string, bucketTime time.Time) string {
 	return fmt.Sprintf("%d:%s:%s:%d", machineID, periodType, metricType, bucketTime.UTC().Unix())
+}
+
+func isCompletedAlertPeriod(sample model.TrafficSample, now time.Time) bool {
+	bucketTime := sample.BucketTime.UTC()
+	currentTime := now.UTC()
+
+	switch sample.PeriodType {
+	case thresholdPeriodHourly:
+		currentHourStart := currentTime.Truncate(time.Hour)
+		return bucketTime.Before(currentHourStart)
+	case thresholdPeriodDaily:
+		currentDayStart := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, time.UTC)
+		return bucketTime.Before(currentDayStart)
+	default:
+		return true
+	}
 }
 
 func (service *AlertService) buildWebhookTemplateData(ctx context.Context, alert *model.Alert) map[string]interface{} {

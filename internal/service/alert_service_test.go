@@ -89,6 +89,31 @@ func (store *stubNotificationDeliveryStore) Create(_ context.Context, delivery *
 	return nil
 }
 
+func (store *stubNotificationDeliveryStore) GetLatestByAlertIDs(_ context.Context, alertIDs []uint) (map[uint]model.NotificationDelivery, error) {
+	result := make(map[uint]model.NotificationDelivery)
+	if len(alertIDs) == 0 {
+		return result, nil
+	}
+
+	alertIDSet := make(map[uint]struct{}, len(alertIDs))
+	for _, alertID := range alertIDs {
+		alertIDSet[alertID] = struct{}{}
+	}
+
+	for index := len(store.deliveries) - 1; index >= 0; index-- {
+		delivery := store.deliveries[index]
+		if _, ok := alertIDSet[delivery.AlertID]; !ok {
+			continue
+		}
+		if _, exists := result[delivery.AlertID]; exists {
+			continue
+		}
+		result[delivery.AlertID] = delivery
+	}
+
+	return result, nil
+}
+
 type stubThresholdProvider struct {
 	rules []dto.ThresholdRuleResp
 }
@@ -183,7 +208,7 @@ func TestAlertServiceEvaluateSamplesDeduplicates(t *testing.T) {
 		{
 			MachineID:  1,
 			PeriodType: thresholdPeriodHourly,
-			BucketTime: time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC),
+			BucketTime: time.Now().UTC().Truncate(time.Hour).Add(-time.Hour),
 			TotalMB:    120,
 		},
 	}
@@ -192,6 +217,65 @@ func TestAlertServiceEvaluateSamplesDeduplicates(t *testing.T) {
 	require.NoError(t, service.EvaluateSamples(context.Background(), 1, samples))
 	require.Len(t, alertStore.list, 1)
 	require.Equal(t, alertNotifyStatusSkipped, alertStore.list[0].NotifyStatus)
+}
+
+func TestAlertServiceSkipsCurrentIncompleteHourlyPeriod(t *testing.T) {
+	alertStore := &stubAlertStore{}
+	service := &AlertService{
+		alertStore:                alertStore,
+		notificationChannelStore:  &stubNotificationChannelStore{},
+		notificationDeliveryStore: &stubNotificationDeliveryStore{},
+		thresholdProvider: &stubThresholdProvider{
+			rules: []dto.ThresholdRuleResp{
+				{PeriodType: thresholdPeriodHourly, MetricType: thresholdMetricTotal, ThresholdMB: 100, Enabled: true},
+			},
+		},
+		httpClient: &stubHTTPClient{statusCode: http.StatusOK, body: "ok"},
+		log:        zerolog.Nop(),
+	}
+
+	samples := []model.TrafficSample{
+		{
+			MachineID:    1,
+			PeriodType:   thresholdPeriodHourly,
+			BucketTime:   time.Now().UTC().Truncate(time.Hour),
+			TotalMB:      120,
+			CollectedAt:  time.Now().UTC(),
+		},
+	}
+
+	require.NoError(t, service.EvaluateSamples(context.Background(), 1, samples))
+	require.Empty(t, alertStore.list)
+}
+
+func TestAlertServiceSkipsCurrentIncompleteDailyPeriod(t *testing.T) {
+	alertStore := &stubAlertStore{}
+	service := &AlertService{
+		alertStore:                alertStore,
+		notificationChannelStore:  &stubNotificationChannelStore{},
+		notificationDeliveryStore: &stubNotificationDeliveryStore{},
+		thresholdProvider: &stubThresholdProvider{
+			rules: []dto.ThresholdRuleResp{
+				{PeriodType: thresholdPeriodDaily, MetricType: thresholdMetricTotal, ThresholdMB: 100, Enabled: true},
+			},
+		},
+		httpClient: &stubHTTPClient{statusCode: http.StatusOK, body: "ok"},
+		log:        zerolog.Nop(),
+	}
+
+	now := time.Now().UTC()
+	samples := []model.TrafficSample{
+		{
+			MachineID:    1,
+			PeriodType:   thresholdPeriodDaily,
+			BucketTime:   time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
+			TotalMB:      120,
+			CollectedAt:  now,
+		},
+	}
+
+	require.NoError(t, service.EvaluateSamples(context.Background(), 1, samples))
+	require.Empty(t, alertStore.list)
 }
 
 func TestAlertServiceSendsWebhookPOST(t *testing.T) {
@@ -220,13 +304,17 @@ func TestAlertServiceSendsWebhookPOST(t *testing.T) {
 			doFunc: func(req *http.Request) (*http.Response, error) {
 				require.Equal(t, http.MethodPost, req.Method)
 				require.Equal(t, "2", req.Header.Get("X-Test"))
-				require.Equal(t, "2:daily:upload:1777075200", req.Header.Get("X-Alert-Key"))
+				require.Regexp(t, `^2:daily:upload:\d+$`, req.Header.Get("X-Alert-Key"))
 				require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 				require.Equal(t, "https://example.com/hook?machine=2&metric=upload", req.URL.String())
 
 				body, err := io.ReadAll(req.Body)
 				require.NoError(t, err)
-				require.JSONEq(t, `{"machine_id":2,"metric_type":"upload","actual_mb":5,"threshold_mb":1,"bucket_time":"2026-04-25T00:00:00Z"}`, string(body))
+				require.Contains(t, string(body), `"machine_id":2`)
+				require.Contains(t, string(body), `"metric_type":"upload"`)
+				require.Contains(t, string(body), `"actual_mb":5`)
+				require.Contains(t, string(body), `"threshold_mb":1`)
+				require.Regexp(t, `"bucket_time":"\d{4}-\d{2}-\d{2}T00:00:00Z"`, string(body))
 
 				return &http.Response{
 					StatusCode: http.StatusOK,
@@ -237,11 +325,12 @@ func TestAlertServiceSendsWebhookPOST(t *testing.T) {
 		log: zerolog.Nop(),
 	}
 
+	now := time.Now().UTC()
 	samples := []model.TrafficSample{
 		{
 			MachineID:  2,
 			PeriodType: thresholdPeriodDaily,
-			BucketTime: time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC),
+			BucketTime: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -1),
 			UploadMB:   5,
 		},
 	}
@@ -277,14 +366,14 @@ func TestAlertServiceSendsWebhookGET(t *testing.T) {
 			doFunc: func(req *http.Request) (*http.Response, error) {
 				require.Equal(t, http.MethodGet, req.Method)
 				require.Equal(t, "2", req.Header.Get("X-Test"))
-				require.Equal(t, "2:daily:upload:1777075200", req.Header.Get("X-Alert-Key"))
+				require.Regexp(t, `^2:daily:upload:\d+$`, req.Header.Get("X-Alert-Key"))
 				require.Empty(t, req.Header.Get("Content-Type"))
 
 				parsedURL, err := url.Parse(req.URL.String())
 				require.NoError(t, err)
 				require.Equal(t, "2", parsedURL.Query().Get("machine"))
 				require.Equal(t, "upload", parsedURL.Query().Get("metric"))
-				require.Equal(t, "2026-04-25T00:00:00Z", parsedURL.Query().Get("bucket"))
+				require.Regexp(t, `^\d{4}-\d{2}-\d{2}T00:00:00Z$`, parsedURL.Query().Get("bucket"))
 
 				if req.Body != nil {
 					body, err := io.ReadAll(req.Body)
@@ -301,11 +390,12 @@ func TestAlertServiceSendsWebhookGET(t *testing.T) {
 		log: zerolog.Nop(),
 	}
 
+	now := time.Now().UTC()
 	samples := []model.TrafficSample{
 		{
 			MachineID:  2,
 			PeriodType: thresholdPeriodDaily,
-			BucketTime: time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC),
+			BucketTime: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -1),
 			UploadMB:   5,
 		},
 	}
@@ -341,13 +431,17 @@ func TestAlertServiceSupportsBareWebhookTemplateVariables(t *testing.T) {
 			doFunc: func(req *http.Request) (*http.Response, error) {
 				require.Equal(t, http.MethodPost, req.Method)
 				require.Equal(t, "2", req.Header.Get("X-Test"))
-				require.Equal(t, "2:daily:upload:1777075200", req.Header.Get("X-Alert-Key"))
+				require.Regexp(t, `^2:daily:upload:\d+$`, req.Header.Get("X-Alert-Key"))
 				require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 				require.Equal(t, "https://example.com/hook?machine=2&metric=upload", req.URL.String())
 
 				body, err := io.ReadAll(req.Body)
 				require.NoError(t, err)
-				require.JSONEq(t, `{"machine_id":2,"metric_type":"upload","actual_mb":5,"threshold_mb":1,"bucket_time":"2026-04-25T00:00:00Z"}`, string(body))
+				require.Contains(t, string(body), `"machine_id":2`)
+				require.Contains(t, string(body), `"metric_type":"upload"`)
+				require.Contains(t, string(body), `"actual_mb":5`)
+				require.Contains(t, string(body), `"threshold_mb":1`)
+				require.Regexp(t, `"bucket_time":"\d{4}-\d{2}-\d{2}T00:00:00Z"`, string(body))
 
 				return &http.Response{
 					StatusCode: http.StatusOK,
@@ -358,11 +452,12 @@ func TestAlertServiceSupportsBareWebhookTemplateVariables(t *testing.T) {
 		log: zerolog.Nop(),
 	}
 
+	now := time.Now().UTC()
 	samples := []model.TrafficSample{
 		{
 			MachineID:  2,
 			PeriodType: thresholdPeriodDaily,
-			BucketTime: time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC),
+			BucketTime: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -1),
 			UploadMB:   5,
 		},
 	}
@@ -610,7 +705,7 @@ func TestAlertServiceFailedNotification(t *testing.T) {
 		{
 			MachineID:  3,
 			PeriodType: thresholdPeriodHourly,
-			BucketTime: time.Date(2026, 4, 25, 10, 0, 0, 0, time.UTC),
+			BucketTime: time.Now().UTC().Truncate(time.Hour).Add(-time.Hour),
 			DownloadMB: 50,
 		},
 	}

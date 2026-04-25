@@ -53,3 +53,27 @@ func (repo *NotificationDeliveryRepo) Create(ctx context.Context, delivery *mode
 
 	return nil
 }
+
+func (repo *NotificationDeliveryRepo) GetLatestByAlertIDs(ctx context.Context, alertIDs []uint) (map[uint]model.NotificationDelivery, error) {
+	result := make(map[uint]model.NotificationDelivery)
+	if len(alertIDs) == 0 {
+		return result, nil
+	}
+
+	var deliveries []model.NotificationDelivery
+	if err := repo.db.WithContext(ctx).
+		Where("alert_id IN ?", alertIDs).
+		Order("alert_id asc, created_at desc, id desc").
+		Find(&deliveries).Error; err != nil {
+		return nil, fmt.Errorf("list notification deliveries by alert ids: %w", err)
+	}
+
+	for _, delivery := range deliveries {
+		if _, exists := result[delivery.AlertID]; exists {
+			continue
+		}
+		result[delivery.AlertID] = delivery
+	}
+
+	return result, nil
+}
