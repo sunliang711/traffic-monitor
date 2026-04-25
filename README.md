@@ -40,6 +40,18 @@ cp .env.example .env
 - `INIT_ADMIN_USERNAME`
 - `INIT_ADMIN_PASSWORD`
 
+其中 `APP_MASTER_KEY` 可用下面的命令生成：
+
+```bash
+openssl rand -base64 32
+```
+
+`SESSION_SECRET` 可用下面的命令生成：
+
+```bash
+openssl rand -hex 32
+```
+
 3. 启动服务：
 
 ```bash

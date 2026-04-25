@@ -9,15 +9,18 @@ import (
 	"traffic-monitor/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
 )
 
 type MachineHandler struct {
 	machineService *service.MachineService
+	log            zerolog.Logger
 }
 
-func NewMachineHandler(machineService *service.MachineService) *MachineHandler {
+func NewMachineHandler(machineService *service.MachineService, log zerolog.Logger) *MachineHandler {
 	return &MachineHandler{
 		machineService: machineService,
+		log:            log,
 	}
 }
 
@@ -118,6 +121,7 @@ func (handler *MachineHandler) TestConnection(ctx *gin.Context) {
 
 	result, err := handler.machineService.TestConnection(ctx.Request.Context(), machineID)
 	if err != nil {
+		handler.log.Error().Err(err).Uint("machine_id", machineID).Msg("machine connection test failed")
 		if errors.Is(err, service.ErrVNStatUnavailable) {
 			ctx.JSON(http.StatusBadRequest, dto.Response{
 				Code:    http.StatusBadRequest,
