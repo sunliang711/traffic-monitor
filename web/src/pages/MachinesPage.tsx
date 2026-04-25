@@ -5,6 +5,7 @@ import type { MachineFormState } from "../lib/app-types";
 import { formatStatusText } from "../lib/app-utils";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
+import PageSizeSelect from "../components/PageSizeSelect";
 
 type MachinesPageProps = {
   busy: boolean;
@@ -26,9 +27,17 @@ function sshKeyName(sshKeys: SSHKey[], sshKeyID: number) {
   return sshKeys.find((sshKey) => sshKey.id === sshKeyID)?.name ?? `SSH Key ${sshKeyID}`;
 }
 
+function shortVnstatVersion(version: string) {
+  const matched = version.trim().match(/^(vnStat\s+\S+)/i);
+
+  return matched?.[1] ?? version;
+}
+
 export default function MachinesPage(props: MachinesPageProps) {
   const { language, t } = useI18n();
   const [isMachineModalOpen, setMachineModalOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const enabledMachines = props.machines.filter((machine) => machine.collect_enabled).length;
   const {
     busy,
@@ -45,12 +54,18 @@ export default function MachinesPage(props: MachinesPageProps) {
     onTestConnection,
     onDeleteMachine,
   } = props;
+  const totalPages = Math.max(1, Math.ceil(machines.length / pageSize));
+  const visibleMachines = machines.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
     if (editingMachineID) {
       setMachineModalOpen(true);
     }
   }, [editingMachineID]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   function openCreateMachineModal() {
     onResetMachineForm();
@@ -70,6 +85,11 @@ export default function MachinesPage(props: MachinesPageProps) {
   async function handleMachineModalSubmit(event: FormEvent<HTMLFormElement>) {
     await onMachineSubmit(event);
     setMachineModalOpen(false);
+  }
+
+  function handlePageSizeChange(nextPageSize: number) {
+    setPageSize(nextPageSize);
+    setPage(1);
   }
 
   return (
@@ -110,60 +130,90 @@ export default function MachinesPage(props: MachinesPageProps) {
             }
           />
         ) : (
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("machinesName")}</th>
-                  <th>{t("machinesHost")}</th>
-                  <th>{t("machinesNetworkInterface")}</th>
-                  <th>SSH Key</th>
-                  <th>{t("machinesCollectEnabled")}</th>
-                  <th>{t("machinesActions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {machines.map((machine) => (
-                  <tr key={machine.id}>
-                    <td>{machine.name}</td>
-                    <td>
-                      {machine.host}:{machine.port}
-                    </td>
-                    <td>{machine.network_interface}</td>
-                    <td>{sshKeyName(sshKeys, machine.ssh_key_id)}</td>
-                    <td>
-                      <span className={`status-badge ${machine.collect_enabled ? "ok" : "idle"}`}>
-                        {machine.collect_enabled ? t("statusEnabled") : t("statusDisabled")}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-row">
-                        <button className="secondary-button" onClick={() => startEditMachine(machine)} type="button">
-                          {t("machinesEdit")}
-                        </button>
-                        <button className="secondary-button" onClick={() => void onTestConnection(machine.id)} type="button">
-                          {t("machinesTest")}
-                        </button>
-                        <button className="danger-button" onClick={() => void onDeleteMachine(machine.id)} type="button">
-                          {t("machinesDelete")}
-                        </button>
-                      </div>
-                      {connectionResults[machine.id] ? (
-                        <p className="card-meta">
-                          {t("machinesTestResult", {
-                            status: formatStatusText(connectionResults[machine.id].status, language),
-                          })}
-                          {connectionResults[machine.id].vnstat_version
-                            ? ` / ${connectionResults[machine.id].vnstat_version}`
-                            : ""}
-                        </p>
-                      ) : null}
-                    </td>
+          <>
+            <div className="table-wrapper">
+              <table className="machine-table">
+                <thead>
+                  <tr>
+                    <th>{t("machinesName")}</th>
+                    <th>{t("machinesHost")}</th>
+                    <th>{t("machinesNetworkInterface")}</th>
+                    <th>SSH Key</th>
+                    <th>{t("machinesCollectEnabled")}</th>
+                    <th>{t("machinesActions")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {visibleMachines.map((machine) => {
+                    const connectionResult = connectionResults[machine.id];
+                    const connectionStatus = connectionResult?.status.toLowerCase();
+                    const connectionResultType = connectionStatus === "success" || connectionStatus === "ok" ? "ok" : "error";
+
+                    return (
+                      <tr key={machine.id}>
+                        <td>{machine.name}</td>
+                        <td>
+                          {machine.host}:{machine.port}
+                        </td>
+                        <td>{machine.network_interface}</td>
+                        <td>{sshKeyName(sshKeys, machine.ssh_key_id)}</td>
+                        <td>
+                          <span className={`status-badge ${machine.collect_enabled ? "ok" : "idle"}`}>
+                            {machine.collect_enabled ? t("statusEnabled") : t("statusDisabled")}
+                          </span>
+                        </td>
+                        <td className="machine-actions-cell">
+                          <div className="machine-actions-stack">
+                            <div className="action-row">
+                              <button className="secondary-button" onClick={() => startEditMachine(machine)} type="button">
+                                {t("machinesEdit")}
+                              </button>
+                              <button className="secondary-button" onClick={() => void onTestConnection(machine.id)} type="button">
+                                {t("machinesTest")}
+                              </button>
+                              <button className="danger-button" onClick={() => void onDeleteMachine(machine.id)} type="button">
+                                {t("machinesDelete")}
+                              </button>
+                            </div>
+                            {connectionResult ? (
+                              <span
+                                className={`machine-test-result ${connectionResultType}`}
+                                title={connectionResult.vnstat_version || undefined}
+                              >
+                                <span className="machine-test-dot" aria-hidden="true" />
+                                <span className="machine-test-label">
+                                  {t("machinesTestResult", {
+                                    status: formatStatusText(connectionResult.status, language),
+                                  })}
+                                </span>
+                                {connectionResult.vnstat_version ? (
+                                  <span className="machine-test-version">{shortVnstatVersion(connectionResult.vnstat_version)}</span>
+                                ) : null}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="pagination-row">
+              <div className="pagination-meta">
+                <span className="card-meta">{t("samplesPageInfo", { page, totalPages, total: machines.length })}</span>
+                <PageSizeSelect value={pageSize} onChange={handlePageSizeChange} />
+              </div>
+              <div className="action-row">
+                <button className="secondary-button" disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">
+                  {t("previousPage")}
+                </button>
+                <button className="secondary-button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} type="button">
+                  {t("nextPage")}
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </section>
 

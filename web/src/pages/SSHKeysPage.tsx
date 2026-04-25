@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { SSHKey } from "../types";
 import type { SSHKeyGenerateState, SSHKeyImportState } from "../lib/app-types";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
+import PageSizeSelect from "../components/PageSizeSelect";
 
 type SSHKeysPageProps = {
   busy: boolean;
@@ -25,9 +26,39 @@ type SSHKeysPageProps = {
 
 type SSHKeyModal = "import" | "generate";
 
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 export default function SSHKeysPage(props: SSHKeysPageProps) {
   const { t } = useI18n();
   const [activeModal, setActiveModal] = useState<SSHKeyModal | null>(null);
+  const [copiedSSHKeyID, setCopiedSSHKeyID] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const totalPages = Math.max(1, Math.ceil(props.sshKeys.length / pageSize));
+  const visibleSSHKeys = props.sshKeys.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   function closeModal() {
     setActiveModal(null);
@@ -41,6 +72,19 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
   async function handleGenerateSubmit(event: FormEvent<HTMLFormElement>) {
     await props.onGenerateSubmit(event);
     setActiveModal(null);
+  }
+
+  function handlePageSizeChange(nextPageSize: number) {
+    setPageSize(nextPageSize);
+    setPage(1);
+  }
+
+  async function handleCopyPublicKey(sshKey: SSHKey) {
+    await copyText(sshKey.public_key);
+    setCopiedSSHKeyID(sshKey.id);
+    window.setTimeout(() => {
+      setCopiedSSHKeyID((current) => (current === sshKey.id ? null : current));
+    }, 1600);
   }
 
   return (
@@ -91,75 +135,102 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
             }
           />
         ) : (
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("sshKeysName")}</th>
-                  <th>{t("sshKeysKeyType")}</th>
-                  <th>{t("sshKeysFingerprintColumn")}</th>
-                  <th>{t("sshKeysPublicKey")}</th>
-                  <th>{t("machinesActions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {props.sshKeys.map((sshKey) => (
-                  <tr key={sshKey.id}>
-                    <td>
-                      <div className="stacked-copy">
-                        <strong>{sshKey.name}</strong>
-                        <span className="card-tag">{sshKey.source_type}</span>
-                      </div>
-                    </td>
-                    <td>{sshKey.key_type}</td>
-                    <td>
-                      <span className="table-text-muted">{sshKey.fingerprint}</span>
-                    </td>
-                    <td>
-                      <pre className="code-block table-code-block">{sshKey.public_key}</pre>
-                    </td>
-                    <td>
-                      <div className="action-row">
-                        <button
-                          className="secondary-button"
-                          onClick={() => props.onStartRenameSSHKey(sshKey)}
-                          type="button"
-                        >
-                          {t("sshKeysRename")}
-                        </button>
-                        <button className="danger-button" onClick={() => void props.onDeleteSSHKey(sshKey.id)} type="button">
-                          {t("sshKeysDelete")}
-                        </button>
-                      </div>
-                      {props.renamingSSHKeyID === sshKey.id ? (
-                        <form
-                          className="inline-edit-form"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            void props.onRenameSSHKey(sshKey.id);
-                          }}
-                        >
-                          <input
-                            value={props.sshRenameName}
-                            onChange={(event) => props.setSSHRenameName(event.target.value)}
-                            placeholder={t("sshKeysNewNamePlaceholder")}
-                          />
-                          <div className="action-row">
-                            <button className="primary-button" disabled={props.busy || !props.sshRenameName.trim()} type="submit">
-                              {t("sshKeysSaveName")}
-                            </button>
-                            <button className="secondary-button" onClick={props.onCancelRenameSSHKey} type="button">
-                              {t("cancel")}
-                            </button>
-                          </div>
-                        </form>
-                      ) : null}
-                    </td>
+          <>
+            <div className="table-wrapper">
+              <table className="ssh-key-table">
+                <thead>
+                  <tr>
+                    <th>{t("sshKeysName")}</th>
+                    <th>{t("sshKeysKeyType")}</th>
+                    <th>{t("sshKeysFingerprintColumn")}</th>
+                    <th>{t("sshKeysPublicKey")}</th>
+                    <th>{t("machinesActions")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {visibleSSHKeys.map((sshKey) => (
+                    <tr key={sshKey.id}>
+                      <td>
+                        <div className="stacked-copy">
+                          <strong>{sshKey.name}</strong>
+                          <span className="card-tag">{sshKey.source_type}</span>
+                        </div>
+                      </td>
+                      <td>{sshKey.key_type}</td>
+                      <td>
+                        <span className="table-text-muted">{sshKey.fingerprint}</span>
+                      </td>
+                      <td>
+                        <div className="public-key-box">
+                          <pre className="code-block table-code-block">{sshKey.public_key}</pre>
+                          <button
+                            className={`copy-public-key-button ${copiedSSHKeyID === sshKey.id ? "copied" : ""}`}
+                            aria-label={copiedSSHKeyID === sshKey.id ? t("sshKeysCopied") : t("sshKeysCopyPublicKey")}
+                            onClick={() => void handleCopyPublicKey(sshKey)}
+                            title={copiedSSHKeyID === sshKey.id ? t("sshKeysCopied") : t("sshKeysCopyPublicKey")}
+                            type="button"
+                          >
+                            <span className="copy-icon" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="action-row">
+                          <button
+                            className="secondary-button"
+                            onClick={() => props.onStartRenameSSHKey(sshKey)}
+                            type="button"
+                          >
+                            {t("sshKeysRename")}
+                          </button>
+                          <button className="danger-button" onClick={() => void props.onDeleteSSHKey(sshKey.id)} type="button">
+                            {t("sshKeysDelete")}
+                          </button>
+                        </div>
+                        {props.renamingSSHKeyID === sshKey.id ? (
+                          <form
+                            className="inline-edit-form"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void props.onRenameSSHKey(sshKey.id);
+                            }}
+                          >
+                            <input
+                              value={props.sshRenameName}
+                              onChange={(event) => props.setSSHRenameName(event.target.value)}
+                              placeholder={t("sshKeysNewNamePlaceholder")}
+                            />
+                            <div className="action-row">
+                              <button className="primary-button" disabled={props.busy || !props.sshRenameName.trim()} type="submit">
+                                {t("sshKeysSaveName")}
+                              </button>
+                              <button className="secondary-button" onClick={props.onCancelRenameSSHKey} type="button">
+                                {t("cancel")}
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="pagination-row">
+              <div className="pagination-meta">
+                <span className="card-meta">{t("samplesPageInfo", { page, totalPages, total: props.sshKeys.length })}</span>
+                <PageSizeSelect value={pageSize} onChange={handlePageSizeChange} />
+              </div>
+              <div className="action-row">
+                <button className="secondary-button" disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">
+                  {t("previousPage")}
+                </button>
+                <button className="secondary-button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} type="button">
+                  {t("nextPage")}
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </section>
 

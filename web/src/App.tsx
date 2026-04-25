@@ -61,7 +61,7 @@ const emptyMachineForm = (): MachineFormState => ({
   remark: "",
 });
 
-const listPageSize = 50;
+const defaultListPageSize = 50;
 
 function AppIcon() {
   return (
@@ -79,8 +79,10 @@ function AppIcon() {
 type ProtectedDataLoadOptions = {
   samplesPage?: number;
   sampleMachineID?: number | null;
+  samplesPageSize?: number;
   alertsPage?: number;
   alertMachineID?: number | null;
+  alertsPageSize?: number;
 };
 
 function App() {
@@ -93,6 +95,8 @@ function App() {
   const [toast, setToast] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
+  const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "AD";
 
   const isSSHKeyMismatchError =
     error.includes("APP_MASTER_KEY") || error.includes("SSH 私钥无法解密") || error.includes("ssh key decrypt failed");
@@ -108,9 +112,11 @@ function App() {
   const [samples, setSamples] = useState<TrafficSample[]>([]);
   const [samplesTotal, setSamplesTotal] = useState(0);
   const [samplesPage, setSamplesPage] = useState(1);
+  const [samplesPageSize, setSamplesPageSize] = useState(defaultListPageSize);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [alertsTotal, setAlertsTotal] = useState(0);
   const [alertsPage, setAlertsPage] = useState(1);
+  const [alertsPageSize, setAlertsPageSize] = useState(defaultListPageSize);
 
   const [selectedThresholdMachineID, setSelectedThresholdMachineID] = useState<number | null>(null);
   const [selectedSampleMachineID, setSelectedSampleMachineID] = useState<number | null>(null);
@@ -187,6 +193,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    setAccountMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
     if (!profile) {
       return;
     }
@@ -221,27 +231,27 @@ function App() {
     }
   }
 
-  function trafficSamplesPath(page: number, machineID: number | null) {
+  function trafficSamplesPath(page: number, machineID: number | null, pageSize = samplesPageSize) {
     return withQuery("/api/v1/traffic-samples", {
       machine_id: machineID,
       page,
-      page_size: listPageSize,
+      page_size: pageSize,
     });
   }
 
-  function alertsPath(page: number, machineID: number | null) {
+  function alertsPath(page: number, machineID: number | null, pageSize = alertsPageSize) {
     return withQuery("/api/v1/alerts", {
       machine_id: machineID,
       page,
-      page_size: listPageSize,
+      page_size: pageSize,
     });
   }
 
-  async function loadSamplesPage(page = samplesPage, machineID = selectedSampleMachineID) {
+  async function loadSamplesPage(page = samplesPage, machineID = selectedSampleMachineID, pageSize = samplesPageSize) {
     setBusy(true);
     setError("");
     try {
-      const response = await get<TrafficSampleList>(trafficSamplesPath(page, machineID));
+      const response = await get<TrafficSampleList>(trafficSamplesPath(page, machineID, pageSize));
       setSamples(response.items);
       setSamplesTotal(response.total);
     } catch (loadError) {
@@ -251,11 +261,11 @@ function App() {
     }
   }
 
-  async function loadAlertsPage(page = alertsPage, machineID = selectedAlertMachineID) {
+  async function loadAlertsPage(page = alertsPage, machineID = selectedAlertMachineID, pageSize = alertsPageSize) {
     setBusy(true);
     setError("");
     try {
-      const response = await get<AlertList>(alertsPath(page, machineID));
+      const response = await get<AlertList>(alertsPath(page, machineID, pageSize));
       setAlerts(response.items);
       setAlertsTotal(response.total);
     } catch (loadError) {
@@ -269,8 +279,10 @@ function App() {
     const nextSamplesPage = options.samplesPage ?? samplesPage;
     const nextSampleMachineID =
       options.sampleMachineID !== undefined ? options.sampleMachineID : selectedSampleMachineID;
+    const nextSamplesPageSize = options.samplesPageSize ?? samplesPageSize;
     const nextAlertsPage = options.alertsPage ?? alertsPage;
     const nextAlertMachineID = options.alertMachineID !== undefined ? options.alertMachineID : selectedAlertMachineID;
+    const nextAlertsPageSize = options.alertsPageSize ?? alertsPageSize;
 
     setBusy(true);
     setError("");
@@ -280,8 +292,8 @@ function App() {
         get<Machine[]>("/api/v1/machines"),
         get<ThresholdRule[]>("/api/v1/thresholds/global"),
         get<NotificationChannel[]>("/api/v1/notification-channels"),
-        get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID)),
-        get<AlertList>(alertsPath(nextAlertsPage, nextAlertMachineID)),
+        get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID, nextSamplesPageSize)),
+        get<AlertList>(alertsPath(nextAlertsPage, nextAlertMachineID, nextAlertsPageSize)),
       ]);
 
       setSSHKeys(sshKeysResp);
@@ -679,6 +691,12 @@ function App() {
     await loadSamplesPage(page, selectedSampleMachineID);
   }
 
+  async function handleSamplesPageSizeChange(pageSize: number) {
+    setSamplesPageSize(pageSize);
+    setSamplesPage(1);
+    await loadSamplesPage(1, selectedSampleMachineID, pageSize);
+  }
+
   async function handleSelectAlertMachine(machineID: number | null) {
     setSelectedAlertMachineID(machineID);
     setAlertsPage(1);
@@ -688,6 +706,12 @@ function App() {
   async function handleAlertsPageChange(page: number) {
     setAlertsPage(page);
     await loadAlertsPage(page, selectedAlertMachineID);
+  }
+
+  async function handleAlertsPageSizeChange(pageSize: number) {
+    setAlertsPageSize(pageSize);
+    setAlertsPage(1);
+    await loadAlertsPage(1, selectedAlertMachineID, pageSize);
   }
 
   async function submitAction(action: () => Promise<void>) {
@@ -765,14 +789,13 @@ function App() {
     <main className="console-shell">
       <aside className="sidebar">
         <section className="brand-panel">
-          <div className="brand-copy">
+          <NavLink className="brand-copy brand-home-link" to="/overview">
             <div className="app-brand">
               <AppIcon />
               <p className="eyebrow">traffic-monitor</p>
             </div>
             <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
-            <p className="muted">{t("currentAdmin", { username: profile.username })}</p>
-          </div>
+          </NavLink>
           <div className="brand-metrics">
             <div>
               <span>{t("overviewEnabledMachines")}</span>
@@ -785,23 +808,6 @@ function App() {
           </div>
         </section>
 
-        <div className="language-switcher" aria-label={t("languageSwitcherLabel")}>
-          <button
-            className={`secondary-button language-button${language === "zh" ? " active" : ""}`}
-            onClick={() => setLanguage("zh")}
-            type="button"
-          >
-            {t("languageChinese")}
-          </button>
-          <button
-            className={`secondary-button language-button${language === "en" ? " active" : ""}`}
-            onClick={() => setLanguage("en")}
-            type="button"
-          >
-            {t("languageEnglish")}
-          </button>
-        </div>
-
         <nav className="tab-list">
           {tabs.map((tab) => (
             <NavLink
@@ -813,10 +819,6 @@ function App() {
             </NavLink>
           ))}
         </nav>
-
-        <button className="secondary-button" onClick={() => void handleLogout()} type="button">
-          {t("logout")}
-        </button>
       </aside>
 
       <section className="content">
@@ -826,16 +828,71 @@ function App() {
             <h2>{tabTitle(activeTab, language)}</h2>
             <p>{pageDescription}</p>
           </div>
-          <div className="content-hero-actions">
-            <button className="secondary-button" onClick={() => void loadProtectedData()} type="button">
-              {t("refresh")}
-            </button>
-            <button className="secondary-button" onClick={() => void handleCleanupHistory()} type="button">
-              {t("cleanupHistory")}
-            </button>
-            <button className="primary-button" onClick={() => void handleCollectNow()} type="button">
-              {t("collectAllMachines")}
-            </button>
+          <div className="topbar-right">
+            <div className="content-hero-actions">
+              <button className="secondary-button" onClick={() => void loadProtectedData()} type="button">
+                {t("refresh")}
+              </button>
+              <button className="secondary-button" onClick={() => void handleCleanupHistory()} type="button">
+                {t("cleanupHistory")}
+              </button>
+              <button className="primary-button" onClick={() => void handleCollectNow()} type="button">
+                {t("collectAllMachines")}
+              </button>
+            </div>
+            <div className="account-toolbar">
+              <div className="topbar-language-switcher" aria-label={t("languageSwitcherLabel")}>
+                <button
+                  className={`topbar-language-button${language === "zh" ? " active" : ""}`}
+                  onClick={() => setLanguage("zh")}
+                  type="button"
+                >
+                  中
+                </button>
+                <button
+                  className={`topbar-language-button${language === "en" ? " active" : ""}`}
+                  onClick={() => setLanguage("en")}
+                  type="button"
+                >
+                  EN
+                </button>
+              </div>
+              <div className="account-menu-wrapper">
+                <button
+                  className={`account-chip${isAccountMenuOpen ? " open" : ""}`}
+                  aria-expanded={isAccountMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setAccountMenuOpen((current) => !current)}
+                  type="button"
+                >
+                  <span className="account-avatar">{adminInitials}</span>
+                  <span className="account-copy">
+                    <strong>{profile.username}</strong>
+                    <small>Admin</small>
+                  </span>
+                  <span className="account-menu-caret" aria-hidden="true" />
+                </button>
+                {isAccountMenuOpen ? (
+                  <div className="account-menu" role="menu">
+                    <div className="account-menu-header">
+                      <strong>{profile.username}</strong>
+                      <span>Admin</span>
+                    </div>
+                    <button
+                      className="account-menu-item danger"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        void handleLogout();
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      {t("logout")}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
         </header>
 
@@ -975,10 +1032,11 @@ function App() {
                 samples={samples}
                 total={samplesTotal}
                 page={samplesPage}
-                pageSize={listPageSize}
+                pageSize={samplesPageSize}
                 collectResults={collectResults}
                 onSelectMachine={(machineID) => void handleSelectSampleMachine(machineID)}
                 onPageChange={(page) => void handleSamplesPageChange(page)}
+                onPageSizeChange={(pageSize) => void handleSamplesPageSizeChange(pageSize)}
                 onCollectCurrentMachine={(machineID) => void handleCollectNow(machineID)}
               />
             }
@@ -991,11 +1049,12 @@ function App() {
                 alerts={alerts}
                 total={alertsTotal}
                 page={alertsPage}
-                pageSize={listPageSize}
+                pageSize={alertsPageSize}
                 machineOptions={machineOptions}
                 selectedMachineID={selectedAlertMachineID}
                 onSelectMachine={(machineID) => void handleSelectAlertMachine(machineID)}
                 onPageChange={(page) => void handleAlertsPageChange(page)}
+                onPageSizeChange={(pageSize) => void handleAlertsPageSizeChange(pageSize)}
               />
             }
           />

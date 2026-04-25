@@ -11,6 +11,7 @@ import {
 } from "../lib/app-utils";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
+import PageSizeSelect from "../components/PageSizeSelect";
 
 type AlertsPageProps = {
   busy: boolean;
@@ -22,6 +23,7 @@ type AlertsPageProps = {
   selectedMachineID: number | null;
   onSelectMachine: (machineID: number | null) => void | Promise<void>;
   onPageChange: (page: number) => void | Promise<void>;
+  onPageSizeChange: (pageSize: number) => void | Promise<void>;
 };
 
 function notifyStatusBadgeClass(status: string) {
@@ -172,7 +174,10 @@ export default function AlertsPage(props: AlertsPageProps) {
               })}
             </div>
             <div className="pagination-row">
-              <span className="card-meta">{t("samplesPageInfo", { page: props.page, totalPages, total: props.total })}</span>
+              <div className="pagination-meta">
+                <span className="card-meta">{t("samplesPageInfo", { page: props.page, totalPages, total: props.total })}</span>
+                <PageSizeSelect value={props.pageSize} onChange={(pageSize) => void props.onPageSizeChange(pageSize)} />
+              </div>
               <div className="action-row">
                 <button
                   className="secondary-button"
