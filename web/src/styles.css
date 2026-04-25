@@ -1282,6 +1282,26 @@ a {
   width: min(1040px, 100%);
 }
 
+.backup-modal-panel {
+  width: min(940px, 100%);
+}
+
+.backup-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.backup-option-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.backup-option-card select[multiple] {
+  min-height: 170px;
+  padding-right: 16px;
+  background-image: none;
+}
+
 .mobile-card-list {
   display: none;
   gap: 14px;
@@ -1760,6 +1780,7 @@ a {
   .dashboard-columns,
   .two-columns,
   .machine-form-grid,
+  .backup-form-grid,
   .webhook-form-grid,
   .telegram-form-grid {
     grid-template-columns: 1fr;

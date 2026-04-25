@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { del, get, patch, post, put, withQuery } from "./api";
 import OverviewTab from "./components/OverviewTab";
@@ -38,9 +38,11 @@ import type {
   AdminProfile,
   AlertItem,
   AlertList,
+  BackupImportResponse,
   CleanupHistoryResponse,
   CollectNowResponse,
   ConnectionTestResponse,
+  EncryptedBackup,
   Machine,
   NotificationChannel,
   SSHKey,
@@ -59,6 +61,14 @@ const emptyMachineForm = (): MachineFormState => ({
   sshKeyID: "",
   collectEnabled: true,
   remark: "",
+});
+
+const emptyBackupExportForm = () => ({
+  password: "",
+  includeAllMachines: true,
+  machineIDs: [] as number[],
+  includeAllSSHKeys: true,
+  sshKeyIDs: [] as number[],
 });
 
 const defaultListPageSize = 50;
@@ -99,6 +109,11 @@ function App() {
   const [isActionMenuOpen, setActionMenuOpen] = useState(false);
   const [isLanguageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [backupModalMode, setBackupModalMode] = useState<"export" | "import" | null>(null);
+  const [backupExportForm, setBackupExportForm] = useState(emptyBackupExportForm);
+  const [backupImportPassword, setBackupImportPassword] = useState("");
+  const [backupImportFileName, setBackupImportFileName] = useState("");
+  const [backupImportFile, setBackupImportFile] = useState<EncryptedBackup | null>(null);
   const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "AD";
   const currentLanguageLabel = language === "zh" ? t("languageChinese") : t("languageEnglish");
   const currentLanguageBadge = language === "zh" ? "中" : "EN";
@@ -412,6 +427,263 @@ function App() {
     setLanguageMenuOpen(false);
   }
 
+  function openBackupModal(mode: "export" | "import") {
+    setActionMenuOpen(false);
+    setLanguageMenuOpen(false);
+    setAccountMenuOpen(false);
+    setBackupModalMode(mode);
+  }
+
+  function closeBackupModal() {
+    setBackupModalMode(null);
+    setBackupImportPassword("");
+    setBackupImportFileName("");
+    setBackupImportFile(null);
+  }
+
+  function selectedNumberOptions(event: ChangeEvent<HTMLSelectElement>) {
+    return Array.from(event.currentTarget.selectedOptions).map((option) => Number(option.value));
+  }
+
+  function backupFileName() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    return `traffic-monitor-backup-${timestamp}.json`;
+  }
+
+  function downloadBackupFile(backup: EncryptedBackup) {
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = backupFileName();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleBackupFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0] ?? null;
+    setBackupImportFile(null);
+    setBackupImportFileName(file?.name ?? "");
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      setBackupImportFile(JSON.parse(content) as EncryptedBackup);
+    } catch {
+      setError(t("backupInvalidFile"));
+    }
+  }
+
+  async function handleBackupExportSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitAction(async () => {
+      const backup = await post<
+        EncryptedBackup,
+        {
+          password: string;
+          include_all_machines: boolean;
+          machine_ids: number[];
+          include_all_ssh_keys: boolean;
+          ssh_key_ids: number[];
+        }
+      >("/api/v1/backups/export", {
+        password: backupExportForm.password,
+        include_all_machines: backupExportForm.includeAllMachines,
+        machine_ids: backupExportForm.machineIDs,
+        include_all_ssh_keys: backupExportForm.includeAllSSHKeys,
+        ssh_key_ids: backupExportForm.sshKeyIDs,
+      });
+
+      downloadBackupFile(backup);
+      setBackupExportForm(emptyBackupExportForm());
+      setBackupModalMode(null);
+      setToast(t("backupExportSuccess"));
+    });
+  }
+
+  async function handleBackupImportSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!backupImportFile) {
+      setError(t("backupFileRequired"));
+      return;
+    }
+
+    await submitAction(async () => {
+      const response = await post<BackupImportResponse, { password: string; backup: EncryptedBackup }>(
+        "/api/v1/backups/import",
+        {
+          password: backupImportPassword,
+          backup: backupImportFile,
+        },
+      );
+      await loadProtectedData();
+      closeBackupModal();
+      setToast(t("backupImportSuccess", {
+        sshKeys: response.imported_ssh_keys,
+        skippedSSHKeys: response.skipped_ssh_keys,
+        machines: response.imported_machines,
+        skippedMachines: response.skipped_machines,
+      }));
+    });
+  }
+
+  function renderBackupModal() {
+    if (!backupModalMode) {
+      return null;
+    }
+
+    return (
+      <div className="modal-backdrop" role="presentation">
+        <section className="modal-panel backup-modal-panel" aria-modal="true" role="dialog">
+          <div className="modal-header">
+            <div>
+              <p className="section-kicker">
+                {backupModalMode === "export" ? t("backupExportAction") : t("backupImportAction")}
+              </p>
+              <h3 className="panel-title">
+                {backupModalMode === "export" ? t("backupExportTitle") : t("backupImportTitle")}
+              </h3>
+            </div>
+            <button className="secondary-button modal-close-button" onClick={closeBackupModal} type="button">
+              {t("cancel")}
+            </button>
+          </div>
+
+          {backupModalMode === "export" ? (
+            <form className="form-grid backup-form-grid" onSubmit={handleBackupExportSubmit}>
+              <label className="field full-width">
+                <span>{t("backupPassword")}</span>
+                <input
+                  type="password"
+                  required
+                  value={backupExportForm.password}
+                  onChange={(event) =>
+                    setBackupExportForm((current) => ({ ...current, password: event.target.value }))
+                  }
+                  placeholder={t("backupPasswordPlaceholder")}
+                />
+              </label>
+              <section className="card backup-option-card">
+                <label className="checkbox-field">
+                  <input
+                    checked={backupExportForm.includeAllMachines}
+                    onChange={(event) =>
+                      setBackupExportForm((current) => ({
+                        ...current,
+                        includeAllMachines: event.target.checked,
+                      }))
+                    }
+                    type="checkbox"
+                  />
+                  <span>{t("backupAllMachines")}</span>
+                </label>
+                <label className="field">
+                  <span>{t("backupSelectedMachines")}</span>
+                  <select
+                    disabled={backupExportForm.includeAllMachines}
+                    multiple
+                    value={backupExportForm.machineIDs.map(String)}
+                    onChange={(event) =>
+                      setBackupExportForm((current) => ({
+                        ...current,
+                        machineIDs: selectedNumberOptions(event),
+                      }))
+                    }
+                  >
+                    {machines.map((machine) => (
+                      <option key={machine.id} value={machine.id}>
+                        {machine.name} ({machine.host})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </section>
+              <section className="card backup-option-card">
+                <label className="checkbox-field">
+                  <input
+                    checked={backupExportForm.includeAllSSHKeys}
+                    onChange={(event) =>
+                      setBackupExportForm((current) => ({
+                        ...current,
+                        includeAllSSHKeys: event.target.checked,
+                      }))
+                    }
+                    type="checkbox"
+                  />
+                  <span>{t("backupAllSSHKeys")}</span>
+                </label>
+                <label className="field">
+                  <span>{t("backupSelectedSSHKeys")}</span>
+                  <select
+                    disabled={backupExportForm.includeAllSSHKeys}
+                    multiple
+                    value={backupExportForm.sshKeyIDs.map(String)}
+                    onChange={(event) =>
+                      setBackupExportForm((current) => ({
+                        ...current,
+                        sshKeyIDs: selectedNumberOptions(event),
+                      }))
+                    }
+                  >
+                    {sshKeys.map((sshKey) => (
+                      <option key={sshKey.id} value={sshKey.id}>
+                        {sshKey.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </section>
+              <div className="modal-actions">
+                <button className="secondary-button" onClick={closeBackupModal} type="button">
+                  {t("cancel")}
+                </button>
+                <button className="primary-button" disabled={busy} type="submit">
+                  {t("backupExportSubmit")}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="form-grid" onSubmit={handleBackupImportSubmit}>
+              <label className="field">
+                <span>{t("backupPassword")}</span>
+                <input
+                  type="password"
+                  required
+                  value={backupImportPassword}
+                  onChange={(event) => setBackupImportPassword(event.target.value)}
+                  placeholder={t("backupPasswordPlaceholder")}
+                />
+              </label>
+              <label className="field">
+                <span>{t("backupFile")}</span>
+                <input
+                  accept="application/json,.json"
+                  onChange={(event) => void handleBackupFileChange(event)}
+                  required
+                  type="file"
+                />
+              </label>
+              {backupImportFileName ? <p className="card-meta">{backupImportFileName}</p> : null}
+              <div className="modal-actions">
+                <button className="secondary-button" onClick={closeBackupModal} type="button">
+                  {t("cancel")}
+                </button>
+                <button className="primary-button" disabled={busy} type="submit">
+                  {t("backupImportSubmit")}
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+      </div>
+    );
+  }
+
   function renderActionMenu() {
     return (
       <div className="account-menu-wrapper topbar-action-menu-wrapper">
@@ -463,6 +735,28 @@ function App() {
               type="button"
             >
               {t("collectAllMachines")}
+            </button>
+            <button
+              className="account-menu-item"
+              onClick={() => {
+                setActionMenuOpen(false);
+                openBackupModal("export");
+              }}
+              role="menuitem"
+              type="button"
+            >
+              {t("backupExportAction")}
+            </button>
+            <button
+              className="account-menu-item"
+              onClick={() => {
+                setActionMenuOpen(false);
+                openBackupModal("import");
+              }}
+              role="menuitem"
+              type="button"
+            >
+              {t("backupImportAction")}
             </button>
           </div>
         ) : null}
@@ -1158,6 +1452,7 @@ function App() {
           />
           <Route path="*" element={<Navigate replace to="/overview" />} />
         </Routes>
+        {renderBackupModal()}
       </section>
     </main>
   );

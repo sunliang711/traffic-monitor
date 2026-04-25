@@ -55,6 +55,17 @@ func (store *stubSSHKeyStore) GetByID(_ context.Context, sshKeyID uint) (*model.
 	return nil, ErrAdminNotFound
 }
 
+func (store *stubSSHKeyStore) UpdateName(_ context.Context, sshKeyID uint, name string) (*model.SSHKey, error) {
+	for _, item := range store.items {
+		if item.ID == sshKeyID {
+			item.Name = name
+			return item, nil
+		}
+	}
+
+	return nil, ErrAdminNotFound
+}
+
 func (store *stubSSHKeyStore) DeleteByID(_ context.Context, sshKeyID uint) error {
 	filtered := make([]*model.SSHKey, 0, len(store.items))
 	for _, item := range store.items {

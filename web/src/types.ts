@@ -117,3 +117,25 @@ export type CleanupHistoryResponse = {
   samples_cutoff: string;
   alerts_cutoff: string;
 };
+
+export type BackupEncryption = {
+  algorithm: string;
+  kdf: string;
+  iterations: number;
+  salt: string;
+  nonce: string;
+};
+
+export type EncryptedBackup = {
+  version: number;
+  encrypted: boolean;
+  encryption: BackupEncryption;
+  payload: string;
+};
+
+export type BackupImportResponse = {
+  imported_ssh_keys: number;
+  skipped_ssh_keys: number;
+  imported_machines: number;
+  skipped_machines: number;
+};
