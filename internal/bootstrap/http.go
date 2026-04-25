@@ -71,7 +71,15 @@ func RegisterHTTPServer(lifecycle fx.Lifecycle, server *http.Server, cfg config.
 }
 
 func registerStaticRoutes(engine *gin.Engine, staticFS fs.FS) {
-	engine.StaticFS("/assets", http.FS(staticFS))
+	assetsFS, err := fs.Sub(staticFS, "assets")
+	if err != nil {
+		engine.NoRoute(func(ctx *gin.Context) {
+			ctx.String(http.StatusInternalServerError, "static assets unavailable")
+		})
+		return
+	}
+
+	engine.StaticFS("/assets", http.FS(assetsFS))
 	engine.NoRoute(func(ctx *gin.Context) {
 		indexContent, err := fs.ReadFile(staticFS, "index.html")
 		if err != nil {
