@@ -2,10 +2,7 @@ package config
 
 import (
 	"fmt"
-	"strings"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
 type Config struct {
@@ -40,33 +37,8 @@ type LogConfig struct {
 }
 
 func NewConfig() (Config, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigType("toml")
-	viperInstance.AddConfigPath("config")
-	viperInstance.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viperInstance.AutomaticEnv()
-
-	setDefaults(viperInstance)
-	bindEnv(viperInstance)
-
-	if err := readPrimaryConfig(viperInstance, "config"); err != nil {
-		return Config{}, err
-	}
-
-	if err := mergeOptionalConfig(viperInstance, "private"); err != nil {
-		return Config{}, err
-	}
-
-	var cfg Config
-	if err := viperInstance.Unmarshal(&cfg); err != nil {
-		return Config{}, fmt.Errorf("unmarshal config: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return Config{}, err
-	}
-
-	return cfg, nil
+	loader := NewLoader(defaultSources())
+	return loader.Load()
 }
 
 func (cfg Config) Validate() error {
@@ -123,53 +95,4 @@ func ProvideDatabaseConfig(cfg Config) DatabaseConfig {
 
 func ProvideLogConfig(cfg Config) LogConfig {
 	return cfg.Log
-}
-
-func setDefaults(viperInstance *viper.Viper) {
-	viperInstance.SetDefault("app.name", "traffic-monitor")
-	viperInstance.SetDefault("app.env", "development")
-	viperInstance.SetDefault("http.addr", ":8080")
-	viperInstance.SetDefault("http.read_timeout", "10s")
-	viperInstance.SetDefault("http.write_timeout", "10s")
-	viperInstance.SetDefault("http.stop_timeout", "15s")
-	viperInstance.SetDefault("database.max_idle_conns", 5)
-	viperInstance.SetDefault("database.max_open_conns", 20)
-	viperInstance.SetDefault("database.conn_max_lifetime", "30m")
-	viperInstance.SetDefault("database.ping_timeout", "5s")
-	viperInstance.SetDefault("log.level", "info")
-}
-
-func bindEnv(viperInstance *viper.Viper) {
-	_ = viperInstance.BindEnv("app.env", "APP_ENV")
-	_ = viperInstance.BindEnv("http.addr", "HTTP_ADDR")
-	_ = viperInstance.BindEnv("database.dsn", "POSTGRES_DSN")
-	_ = viperInstance.BindEnv("log.level", "LOG_LEVEL")
-}
-
-func readPrimaryConfig(viperInstance *viper.Viper, name string) error {
-	viperInstance.SetConfigName(name)
-	if err := viperInstance.ReadInConfig(); err != nil {
-		_, isConfigNotFound := err.(viper.ConfigFileNotFoundError)
-		if isConfigNotFound {
-			return nil
-		}
-
-		return fmt.Errorf("read %s config: %w", name, err)
-	}
-
-	return nil
-}
-
-func mergeOptionalConfig(viperInstance *viper.Viper, name string) error {
-	viperInstance.SetConfigName(name)
-	if err := viperInstance.MergeInConfig(); err != nil {
-		_, isConfigNotFound := err.(viper.ConfigFileNotFoundError)
-		if isConfigNotFound {
-			return nil
-		}
-
-		return fmt.Errorf("read %s config: %w", name, err)
-	}
-
-	return nil
 }

@@ -59,8 +59,9 @@
 ## 6. 配置规范
 
 - 配置加载统一放在 `config` 包
-- 默认加载顺序：默认值 < 配置文件 < 环境变量
-- 新增配置项时必须补充默认值和校验
+- 默认加载顺序：内嵌 `default.toml` < `config/config.toml` < `config/private.toml` < 环境变量
+- 默认配置禁止写在 Go 代码中，统一维护在可执行文件内嵌的 `default.toml`
+- 新增配置项时必须同步更新 `default.toml` 和校验逻辑
 - 安全敏感配置只能通过受控配置注入
 - 以下配置必须支持环境变量注入：
   - `POSTGRES_DSN`
