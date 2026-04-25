@@ -73,6 +73,7 @@ func Run() {
 			bootstrap.RegisterDatabaseLifecycle,
 			bootstrap.RegisterAdminBootstrap,
 			bootstrap.RegisterHTTPServer,
+			config.RegisterConfigLogging,
 			service.RegisterTrafficScheduler,
 			service.RegisterHistoryCleanupScheduler,
 			handler.RegisterRoutes,
