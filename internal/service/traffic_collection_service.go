@@ -189,7 +189,7 @@ func (service *TrafficCollectionService) collectMachineSamples(ctx context.Conte
 
 	privateKeyPEM, err := service.dataProtector.Decrypt(sshKey.PrivateKeyCiphertext)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt ssh private key: %w", err)
+		return nil, fmt.Errorf("%w: current APP_MASTER_KEY may not match the key used when this SSH key was imported: %v", ErrSSHKeyDecryptFailed, err)
 	}
 
 	commandContext, cancel := context.WithTimeout(ctx, service.sshConfig.CommandTimeout)

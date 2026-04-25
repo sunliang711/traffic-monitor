@@ -293,6 +293,25 @@ pre {
   color: #ffc7cf;
 }
 
+.message.warning {
+  background: linear-gradient(135deg, rgba(168, 94, 24, 0.3), rgba(120, 58, 18, 0.34));
+  color: #ffe2b8;
+  border: 1px solid rgba(255, 184, 77, 0.28);
+  box-shadow: 0 12px 30px rgba(120, 58, 18, 0.18);
+}
+
+.message.warning strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #fff1d6;
+}
+
+.message.warning .message-detail {
+  display: block;
+  color: #ffd9a3;
+  line-height: 1.5;
+}
+
 .message.info {
   background: rgba(34, 91, 173, 0.22);
   color: #bdd6ff;

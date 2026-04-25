@@ -115,6 +115,9 @@ function App() {
   const [error, setError] = useState<string>("");
   const [profile, setProfile] = useState<AdminProfile | null>(null);
 
+  const isSSHKeyMismatchError =
+    error.includes("APP_MASTER_KEY") || error.includes("SSH 私钥无法解密") || error.includes("ssh key decrypt failed");
+
   const [loginForm, setLoginForm] = useState<LoginFormState>({
     username: "admin",
     password: "",
@@ -546,7 +549,18 @@ function App() {
         </header>
 
         {toast ? <div className="message success">{toast}</div> : null}
-        {error ? <div className="message error">{error}</div> : null}
+        {error ? (
+          <div className={`message ${isSSHKeyMismatchError ? "warning" : "error"}`}>
+            {isSSHKeyMismatchError ? (
+              <>
+                <strong>SSH Key 与当前 APP_MASTER_KEY 不匹配</strong>
+                <span className="message-detail">{error}</span>
+              </>
+            ) : (
+              error
+            )}
+          </div>
+        ) : null}
         {busy ? <div className="message info">正在处理请求...</div> : null}
 
         {activeTab === "overview" ? (

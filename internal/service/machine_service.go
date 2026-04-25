@@ -13,10 +13,11 @@ import (
 )
 
 var (
-	ErrMachineNotFound      = errors.New("machine not found")
-	ErrSSHKeyNotFound       = errors.New("ssh key not found")
-	ErrInvalidMachineConfig = errors.New("invalid machine config")
-	ErrVNStatUnavailable    = errors.New("vnstat unavailable")
+	ErrMachineNotFound       = errors.New("machine not found")
+	ErrSSHKeyNotFound        = errors.New("ssh key not found")
+	ErrInvalidMachineConfig  = errors.New("invalid machine config")
+	ErrVNStatUnavailable     = errors.New("vnstat unavailable")
+	ErrSSHKeyDecryptFailed   = errors.New("ssh key decrypt failed")
 )
 
 type MachineStore interface {
@@ -167,7 +168,7 @@ func (service *MachineService) TestConnection(ctx context.Context, machineID uin
 
 	privateKeyPEM, err := service.dataProtector.Decrypt(sshKey.PrivateKeyCiphertext)
 	if err != nil {
-		return dto.MachineConnectionTestResp{}, fmt.Errorf("decrypt ssh private key: %w", err)
+		return dto.MachineConnectionTestResp{}, fmt.Errorf("%w: current APP_MASTER_KEY may not match the key used when this SSH key was imported", ErrSSHKeyDecryptFailed)
 	}
 
 	commandContext, cancel := context.WithTimeout(ctx, service.sshConfig.CommandTimeout)

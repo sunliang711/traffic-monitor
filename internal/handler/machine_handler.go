@@ -121,6 +121,19 @@ func (handler *MachineHandler) TestConnection(ctx *gin.Context) {
 
 	result, err := handler.machineService.TestConnection(ctx.Request.Context(), machineID)
 	if err != nil {
+		if errors.Is(err, service.ErrSSHKeyDecryptFailed) {
+			handler.log.Error().
+				Err(err).
+				Uint("machine_id", machineID).
+				Msg("machine connection test failed: stored ssh key cannot be decrypted with current APP_MASTER_KEY")
+			ctx.JSON(http.StatusConflict, dto.Response{
+				Code:    http.StatusConflict,
+				Data:    result,
+				Message: "SSH 私钥无法解密，当前 APP_MASTER_KEY 可能与导入该密钥时使用的不一致，请恢复旧密钥或重新导入 SSH Key",
+			})
+			return
+		}
+
 		handler.log.Error().Err(err).Uint("machine_id", machineID).Msg("machine connection test failed")
 		if errors.Is(err, service.ErrVNStatUnavailable) {
 			ctx.JSON(http.StatusBadRequest, dto.Response{
@@ -155,6 +168,12 @@ func handleMachineServiceError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusBadRequest, dto.Response{Code: http.StatusBadRequest, Data: nil, Message: "ssh key not found"})
 	case errors.Is(err, service.ErrInvalidMachineConfig):
 		ctx.JSON(http.StatusBadRequest, dto.Response{Code: http.StatusBadRequest, Data: nil, Message: "invalid machine config"})
+	case errors.Is(err, service.ErrSSHKeyDecryptFailed):
+		ctx.JSON(http.StatusConflict, dto.Response{
+			Code:    http.StatusConflict,
+			Data:    nil,
+			Message: "SSH 私钥无法解密，当前 APP_MASTER_KEY 可能与导入该密钥时使用的不一致，请恢复旧密钥或重新导入 SSH Key",
+		})
 	default:
 		internalServerError(ctx)
 	}
