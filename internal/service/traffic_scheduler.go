@@ -35,6 +35,10 @@ type trafficCollectJob struct {
 	machine model.Machine
 }
 
+func NewTrafficCollectRunner(collector *TrafficCollectionService) TrafficCollectRunner {
+	return collector
+}
+
 func NewTrafficScheduler(cfg config.CollectorConfig, collector TrafficCollectRunner, log zerolog.Logger) *TrafficScheduler {
 	return &TrafficScheduler{
 		cfg:       cfg,

@@ -53,6 +53,10 @@ type TrafficAlertEvaluator interface {
 	EvaluateSamples(ctx context.Context, machineID uint, samples []model.TrafficSample) error
 }
 
+func NewTrafficAlertEvaluator(alertService *AlertService) TrafficAlertEvaluator {
+	return alertService
+}
+
 func NewTrafficCollectionService(machineStore *repo.MachineRepo, sshKeyStore *repo.SSHKeyRepo, dataProtector SSHKeyProtector, sshRunner SSHCommandRunner, trafficSampleStore *repo.TrafficSampleRepo, alertEvaluator TrafficAlertEvaluator, sshConfig config.SSHConfig) *TrafficCollectionService {
 	return &TrafficCollectionService{
 		machineStore:       machineStore,
