@@ -27,7 +27,7 @@ func NewAuthHandler(authService *service.AuthService, sessionStore *sessions.Coo
 	}
 }
 
-func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, authMiddleware *middleware.AuthMiddleware, sshKeyHandler *SSHKeyHandler, machineHandler *MachineHandler, thresholdHandler *ThresholdHandler) {
+func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, authMiddleware *middleware.AuthMiddleware, sshKeyHandler *SSHKeyHandler, machineHandler *MachineHandler, thresholdHandler *ThresholdHandler, trafficSampleHandler *TrafficSampleHandler) {
 	engine.GET("/healthz", healthHandler.GetHealth)
 
 	apiGroup := engine.Group("/api/v1")
@@ -43,6 +43,7 @@ func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandle
 	sshKeyHandler.RegisterRoutes(authenticatedGroup)
 	machineHandler.RegisterRoutes(authenticatedGroup)
 	thresholdHandler.RegisterRoutes(apiGroup, authenticatedGroup)
+	trafficSampleHandler.RegisterRoutes(authenticatedGroup)
 }
 
 func (handler *AuthHandler) Login(ctx *gin.Context) {
