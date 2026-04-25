@@ -1,8 +1,10 @@
 import type { AlertItem } from "../types";
-import { formatAlertPeriod, formatTime, formatTrafficValue } from "../lib/app-utils";
+import type { MachineOption } from "../lib/app-types";
+import { formatAlertPeriod, formatTime, formatTrafficValue, machineLabel } from "../lib/app-utils";
 
 type AlertsPageProps = {
   alerts: AlertItem[];
+  machineOptions: MachineOption[];
 };
 
 export default function AlertsPage(props: AlertsPageProps) {
@@ -26,7 +28,7 @@ export default function AlertsPage(props: AlertsPageProps) {
           <tbody>
             {props.alerts.map((alert) => (
               <tr key={alert.id}>
-                <td>{alert.machine_id}</td>
+                <td>{machineLabel(props.machineOptions, alert.machine_id)}</td>
                 <td>{alert.period_type}</td>
                 <td>{alert.metric_type}</td>
                 <td>{formatAlertPeriod(alert.period_type, alert.bucket_time)}</td>

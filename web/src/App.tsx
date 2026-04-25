@@ -687,7 +687,7 @@ function App() {
               />
             }
           />
-          <Route path="/alerts" element={<AlertsPage alerts={alerts} />} />
+          <Route path="/alerts" element={<AlertsPage alerts={alerts} machineOptions={machineOptions} />} />
           <Route path="*" element={<Navigate replace to="/overview" />} />
         </Routes>
       </section>

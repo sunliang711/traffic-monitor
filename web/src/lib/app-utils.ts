@@ -7,6 +7,11 @@ export type TabKey =
   | "samples"
   | "alerts";
 
+export type MachineLabelOption = {
+  value: number;
+  label: string;
+};
+
 export type ThresholdFormRow = {
   period_type: string;
   metric_type: string;
@@ -172,4 +177,8 @@ export function tabPath(tab: TabKey) {
 
 export function tabKeyFromPath(pathname: string): TabKey {
   return tabs.find((tab) => tab.path === pathname)?.key ?? "overview";
+}
+
+export function machineLabel(machineOptions: MachineLabelOption[], machineID: number) {
+  return machineOptions.find((option) => option.value === machineID)?.label ?? `机器 ${machineID}`;
 }

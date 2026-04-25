@@ -51,7 +51,7 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
           <form onSubmit={props.onSaveMachineThresholds}>
             <ThresholdEditor rows={props.machineThresholdForm} onChange={props.onChangeMachineThresholdForm} />
             <button className="primary-button" disabled={props.busy || props.machineThresholdsSaved} type="submit">
-              保存 {props.selectedMachine.name} 的阈值
+              保存 {props.selectedMachine.name} ({props.selectedMachine.host}) 的阈值
             </button>
           </form>
         ) : (

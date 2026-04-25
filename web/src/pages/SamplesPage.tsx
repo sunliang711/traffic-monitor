@@ -1,6 +1,6 @@
 import type { CollectNowResponse, TrafficSample } from "../types";
 import type { MachineOption } from "../lib/app-types";
-import { formatTime, formatTrafficValue } from "../lib/app-utils";
+import { formatTime, formatTrafficValue, machineLabel } from "../lib/app-utils";
 
 type SamplesPageProps = {
   selectedMachineID: number | null;
@@ -60,7 +60,7 @@ export default function SamplesPage(props: SamplesPageProps) {
           <tbody>
             {filteredSamples.map((sample) => (
               <tr key={`${sample.id}-${sample.period_type}`}>
-                <td>{sample.machine_id}</td>
+                <td>{machineLabel(props.machineOptions, sample.machine_id)}</td>
                 <td>{sample.period_type}</td>
                 <td>{formatTime(sample.bucket_time)}</td>
                 <td>{formatTrafficValue(sample.upload_mb)}</td>
@@ -79,7 +79,7 @@ export default function SamplesPage(props: SamplesPageProps) {
           {props.collectResults.map((result) => (
             <article className="card" key={`${result.machine_id}-${result.status}`}>
               <div className="card-header">
-                <strong>机器 {result.machine_id}</strong>
+                <strong>{machineLabel(props.machineOptions, result.machine_id)}</strong>
                 <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
                   {result.status}
                 </span>
