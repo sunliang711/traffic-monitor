@@ -23,6 +23,7 @@ ping_timeout = "5s"
 
 [log]
 level = "info"
+format = "console"
 
 [session]
 secret = ""

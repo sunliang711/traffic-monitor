@@ -29,7 +29,7 @@ export const tabs: Array<{ key: TabKey; label: string; path: string }> = [
   { key: "machines", label: "机器", path: "/machines" },
   { key: "sshKeys", label: "SSH Key", path: "/ssh-keys" },
   { key: "thresholds", label: "阈值", path: "/thresholds" },
-  { key: "notifications", label: "通知", path: "/notifications" },
+  { key: "notifications", label: "通知设置", path: "/notifications" },
   { key: "samples", label: "样本", path: "/samples" },
   { key: "alerts", label: "告警", path: "/alerts" },
 ];

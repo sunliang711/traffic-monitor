@@ -173,8 +173,15 @@ function App() {
       setSamples(samplesResp.items);
       setAlerts(alertsResp.items);
 
-      const fallbackMachineID = selectedMachineID ?? machinesResp[0]?.id ?? null;
-      setSelectedMachineID(fallbackMachineID);
+      setSelectedMachineID((currentSelectedMachineID) => {
+        if (currentSelectedMachineID === null) {
+          return null;
+        }
+
+        return machinesResp.some((machine) => machine.id === currentSelectedMachineID)
+          ? currentSelectedMachineID
+          : machinesResp[0]?.id ?? null;
+      });
     } catch (loadError) {
       setError(toErrorMessage(loadError));
     } finally {

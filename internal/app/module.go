@@ -10,6 +10,7 @@ import (
 	"traffic-monitor/internal/service"
 
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 )
 
 func Run() {
@@ -26,6 +27,7 @@ func Run() {
 			config.ProvideSecurityConfig,
 			config.ProvideBootstrapConfig,
 			logger.NewLogger,
+			logger.NewFxLogger,
 			bootstrap.NewDB,
 			bootstrap.NewGinEngine,
 			bootstrap.NewHTTPServer,
@@ -60,6 +62,9 @@ func Run() {
 			handler.NewTrafficSampleHandler,
 			handler.NewAlertHandler,
 		),
+		fx.WithLogger(func(log logger.FxLogger) fxevent.Logger {
+			return log
+		}),
 		fx.Invoke(
 			bootstrap.RegisterDatabaseLifecycle,
 			bootstrap.RegisterAdminBootstrap,

@@ -15,6 +15,7 @@ func defaultSources() []Source {
 			{Key: "http.addr", EnvName: "HTTP_ADDR"},
 			{Key: "database.dsn", EnvName: "POSTGRES_DSN"},
 			{Key: "log.level", EnvName: "LOG_LEVEL"},
+			{Key: "log.format", EnvName: "LOG_FORMAT"},
 			{Key: "session.secret", EnvName: "SESSION_SECRET"},
 			{Key: "session.cookie_name", EnvName: "SESSION_COOKIE_NAME"},
 			{Key: "session.secure", EnvName: "SESSION_SECURE"},

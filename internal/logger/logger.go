@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"traffic-monitor/internal/config"
 
@@ -23,7 +24,9 @@ func NewLogger(cfg config.LogConfig) zerolog.Logger {
 		level = zerolog.InfoLevel
 	}
 
-	logger := zerolog.New(os.Stdout).
+	writer := buildWriter(cfg)
+
+	logger := zerolog.New(writer).
 		Level(level).
 		With().
 		Timestamp().
@@ -31,4 +34,18 @@ func NewLogger(cfg config.LogConfig) zerolog.Logger {
 		Logger()
 
 	return logger
+}
+
+func buildWriter(cfg config.LogConfig) zerolog.LevelWriter {
+	switch strings.ToLower(strings.TrimSpace(cfg.Format)) {
+	case "", "json":
+		return zerolog.MultiLevelWriter(os.Stdout)
+	case "console":
+		return zerolog.MultiLevelWriter(zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: time.RFC3339,
+		})
+	default:
+		return zerolog.MultiLevelWriter(os.Stdout)
+	}
 }

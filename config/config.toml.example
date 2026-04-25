@@ -1,15 +1,36 @@
+[app]
+name = "traffic-monitor"
+env = "development"
+
 [collector]
 enabled = true
 interval = "5m"
 max_workers = 5
 retry_times = 1
 
+[http]
+addr = ":8080"
+read_timeout = "10s"
+write_timeout = "10s"
+stop_timeout = "15s"
+
 [database]
 dsn = "host=127.0.0.1 user=postgres password=postgres dbname=traffic_monitor port=5432 sslmode=disable"
+max_idle_conns = 5
+max_open_conns = 20
+conn_max_lifetime = "30m"
+ping_timeout = "5s"
+
+[log]
+level = "info"
+format = "json"
 
 [session]
 # Prefer environment variable SESSION_SECRET in runtime.
 secret = "replace-with-session-secret"
+cookie_name = "traffic_monitor_session"
+max_age = "24h"
+secure = false
 
 [ssh]
 dial_timeout = "5s"
