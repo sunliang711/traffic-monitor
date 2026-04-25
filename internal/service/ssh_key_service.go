@@ -21,18 +21,27 @@ const (
 	sshKeyTypeED25519     = "ed25519"
 )
 
-var ErrDuplicateSSHKeyFingerprint = errors.New("duplicate ssh key fingerprint")
+var (
+	ErrDuplicateSSHKeyFingerprint = errors.New("duplicate ssh key fingerprint")
+	ErrSSHKeyInUse                = errors.New("ssh key is still referenced by machines")
+)
 
 type SSHKeyStore interface {
 	Create(ctx context.Context, sshKey *model.SSHKey) error
 	List(ctx context.Context) ([]model.SSHKey, error)
 	GetByID(ctx context.Context, sshKeyID uint) (*model.SSHKey, error)
+	UpdateName(ctx context.Context, sshKeyID uint, name string) (*model.SSHKey, error)
 	DeleteByID(ctx context.Context, sshKeyID uint) error
 }
 
+type SSHKeyMachineStore interface {
+	ListBySSHKeyID(ctx context.Context, sshKeyID uint) ([]model.Machine, error)
+}
+
 type SSHKeyService struct {
-	sshKeyStore   SSHKeyStore
-	dataProtector SSHKeyProtector
+	sshKeyStore    SSHKeyStore
+	machineStore   SSHKeyMachineStore
+	dataProtector  SSHKeyProtector
 }
 
 type SSHKeyProtector interface {
@@ -40,9 +49,10 @@ type SSHKeyProtector interface {
 	Decrypt(ciphertext string) ([]byte, error)
 }
 
-func NewSSHKeyService(sshKeyStore *repo.SSHKeyRepo, dataProtector SSHKeyProtector) *SSHKeyService {
+func NewSSHKeyService(sshKeyStore *repo.SSHKeyRepo, machineStore *repo.MachineRepo, dataProtector SSHKeyProtector) *SSHKeyService {
 	return &SSHKeyService{
 		sshKeyStore:   sshKeyStore,
+		machineStore:  machineStore,
 		dataProtector: dataProtector,
 	}
 }
@@ -130,13 +140,36 @@ func (service *SSHKeyService) List(ctx context.Context) ([]dto.SSHKeyResp, error
 func (service *SSHKeyService) GetPublicKey(ctx context.Context, sshKeyID uint) (dto.SSHKeyResp, error) {
 	sshKey, err := service.sshKeyStore.GetByID(ctx, sshKeyID)
 	if err != nil {
+		if repo.IsRecordNotFound(err) {
+			return dto.SSHKeyResp{}, ErrSSHKeyNotFound
+		}
 		return dto.SSHKeyResp{}, fmt.Errorf("get ssh key public key: %w", err)
 	}
 
 	return toSSHKeyResp(sshKey), nil
 }
 
+func (service *SSHKeyService) Rename(ctx context.Context, sshKeyID uint, name string) (dto.SSHKeyResp, error) {
+	sshKey, err := service.sshKeyStore.UpdateName(ctx, sshKeyID, name)
+	if err != nil {
+		if repo.IsRecordNotFound(err) {
+			return dto.SSHKeyResp{}, ErrSSHKeyNotFound
+		}
+		return dto.SSHKeyResp{}, fmt.Errorf("rename ssh key: %w", err)
+	}
+
+	return toSSHKeyResp(sshKey), nil
+}
+
 func (service *SSHKeyService) Delete(ctx context.Context, sshKeyID uint) error {
+	machines, err := service.machineStore.ListBySSHKeyID(ctx, sshKeyID)
+	if err != nil {
+		return fmt.Errorf("list machines by ssh key: %w", err)
+	}
+	if len(machines) > 0 {
+		return ErrSSHKeyInUse
+	}
+
 	if err := service.sshKeyStore.DeleteByID(ctx, sshKeyID); err != nil {
 		return fmt.Errorf("delete ssh key: %w", err)
 	}

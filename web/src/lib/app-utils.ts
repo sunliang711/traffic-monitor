@@ -115,7 +115,9 @@ export function renderWebhookPreviewTemplate(value: string): string {
     ["{{bucket_time}}", "2026-04-25 12:00:00 +0000 UTC"],
     ["{{bucket_time_rfc3339}}", "2026-04-25T12:00:00Z"],
     ["{{threshold_mb}}", "1024"],
+    ["{{threshold_human_readable}}", "1.000 GB"],
     ["{{actual_mb}}", "1536"],
+    ["{{actual_human_readable}}", "1.500 GB"],
     ["{{alert_key}}", "test:webhook:alert"],
   ].reduce((result, [token, replacement]) => result.split(token).join(replacement), value);
 }

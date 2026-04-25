@@ -25,6 +25,7 @@ import type {
   AdminProfile,
   AlertItem,
   AlertList,
+  CleanupHistoryResponse,
   CollectNowResponse,
   ConnectionTestResponse,
   Machine,
@@ -74,10 +75,13 @@ function App() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
   const [selectedMachineID, setSelectedMachineID] = useState<number | null>(null);
+  const [selectedAlertMachineID, setSelectedAlertMachineID] = useState<number | null>(null);
   const [editingMachineID, setEditingMachineID] = useState<number | null>(null);
   const [machineForm, setMachineForm] = useState<MachineFormState>(emptyMachineForm());
   const [sshImportForm, setSSHImportForm] = useState<SSHKeyImportState>({ name: "", privateKey: "" });
   const [sshGenerateForm, setSSHGenerateForm] = useState<SSHKeyGenerateState>({ name: "" });
+  const [renamingSSHKeyID, setRenamingSSHKeyID] = useState<number | null>(null);
+  const [sshRenameName, setSSHRenameName] = useState("");
   const [globalThresholdForm, setGlobalThresholdForm] = useState<ThresholdFormRow[]>(emptyThresholdRows());
   const [machineThresholdForm, setMachineThresholdForm] = useState<ThresholdFormRow[]>(emptyThresholdRows());
   const [webhookForm, setWebhookForm] = useState<WebhookFormState>({
@@ -282,8 +286,34 @@ function App() {
   async function handleDeleteSSHKey(id: number) {
     await submitAction(async () => {
       await del<null>(`/api/v1/ssh-keys/${id}`);
+      if (renamingSSHKeyID === id) {
+        setRenamingSSHKeyID(null);
+        setSSHRenameName("");
+      }
       await loadProtectedData();
       setToast("SSH Key 已删除");
+    });
+  }
+
+  function startRenameSSHKey(sshKey: SSHKey) {
+    setRenamingSSHKeyID(sshKey.id);
+    setSSHRenameName(sshKey.name);
+  }
+
+  function cancelRenameSSHKey() {
+    setRenamingSSHKeyID(null);
+    setSSHRenameName("");
+  }
+
+  async function handleRenameSSHKey(id: number) {
+    await submitAction(async () => {
+      await patch<SSHKey, { name: string }>(`/api/v1/ssh-keys/${id}`, {
+        name: sshRenameName,
+      });
+      setRenamingSSHKeyID(null);
+      setSSHRenameName("");
+      await loadProtectedData();
+      setToast("SSH Key 名称已更新");
     });
   }
 
@@ -435,6 +465,24 @@ function App() {
     });
   }
 
+  async function handleCleanupHistory() {
+    if (!window.confirm("确认清理历史数据吗？将硬删除超过默认保留天数的样本和告警数据，删除后不可恢复。")) {
+      return;
+    }
+
+    await submitAction(async () => {
+      const response = await post<
+        CleanupHistoryResponse,
+        { delete_samples: boolean; delete_alerts: boolean }
+      >("/api/v1/traffic-samples/cleanup", {
+        delete_samples: true,
+        delete_alerts: true,
+      });
+      await loadProtectedData();
+      setToast(`历史数据清理完成：删除样本 ${response.deleted_samples} 条，删除告警 ${response.deleted_alerts} 条`);
+    });
+  }
+
   function startEditMachine(machine: Machine) {
     setEditingMachineID(machine.id);
     setMachineForm({
@@ -556,6 +604,9 @@ function App() {
             <button className="secondary-button" onClick={() => void loadProtectedData()} type="button">
               刷新
             </button>
+            <button className="secondary-button" onClick={() => void handleCleanupHistory()} type="button">
+              清理历史数据
+            </button>
             <button className="primary-button" onClick={() => void handleCollectNow()} type="button">
               手动采集全部机器
             </button>
@@ -606,6 +657,12 @@ function App() {
                 onImportSubmit={handleImportSSHKey}
                 onGenerateSubmit={handleGenerateSSHKey}
                 onDeleteSSHKey={handleDeleteSSHKey}
+                renamingSSHKeyID={renamingSSHKeyID}
+                sshRenameName={sshRenameName}
+                setSSHRenameName={setSSHRenameName}
+                onStartRenameSSHKey={startRenameSSHKey}
+                onCancelRenameSSHKey={cancelRenameSSHKey}
+                onRenameSSHKey={handleRenameSSHKey}
               />
             }
           />
@@ -687,7 +744,17 @@ function App() {
               />
             }
           />
-          <Route path="/alerts" element={<AlertsPage alerts={alerts} machineOptions={machineOptions} />} />
+          <Route
+            path="/alerts"
+            element={
+              <AlertsPage
+                alerts={alerts}
+                machineOptions={machineOptions}
+                selectedMachineID={selectedAlertMachineID}
+                onSelectMachine={setSelectedAlertMachineID}
+              />
+            }
+          />
           <Route path="*" element={<Navigate replace to="/overview" />} />
         </Routes>
       </section>

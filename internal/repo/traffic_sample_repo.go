@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"traffic-monitor/internal/model"
 
@@ -19,6 +20,13 @@ type TrafficSampleFilter struct {
 	PeriodType string
 	Page       int
 	PageSize   int
+}
+
+type TrafficSampleDeleteFilter struct {
+	MachineID        *uint
+	PeriodType       string
+	BeforeBucketTime *time.Time
+	Limit            int
 }
 
 func NewTrafficSampleRepo(db *gorm.DB) *TrafficSampleRepo {
@@ -78,4 +86,45 @@ func (repo *TrafficSampleRepo) List(ctx context.Context, filter TrafficSampleFil
 	}
 
 	return samples, total, nil
+}
+
+func (repo *TrafficSampleRepo) DeleteBefore(ctx context.Context, filter TrafficSampleDeleteFilter) (int64, error) {
+	query := repo.db.WithContext(ctx).Model(&model.TrafficSample{})
+
+	if filter.MachineID != nil {
+		query = query.Where("machine_id = ?", *filter.MachineID)
+	}
+
+	if filter.PeriodType != "" {
+		query = query.Where("period_type = ?", filter.PeriodType)
+	}
+
+	if filter.BeforeBucketTime != nil {
+		query = query.Where("bucket_time < ?", *filter.BeforeBucketTime)
+	}
+
+	if filter.Limit > 0 {
+		var ids []uint
+		if err := query.Order("bucket_time asc").Limit(filter.Limit).Pluck("id", &ids).Error; err != nil {
+			return 0, fmt.Errorf("list traffic sample ids for delete: %w", err)
+		}
+
+		if len(ids) == 0 {
+			return 0, nil
+		}
+
+		result := repo.db.WithContext(ctx).Where("id IN ?", ids).Delete(&model.TrafficSample{})
+		if result.Error != nil {
+			return 0, fmt.Errorf("delete traffic samples by ids: %w", result.Error)
+		}
+
+		return result.RowsAffected, nil
+	}
+
+	result := query.Delete(&model.TrafficSample{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("delete traffic samples: %w", result.Error)
+	}
+
+	return result.RowsAffected, nil
 }

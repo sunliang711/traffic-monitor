@@ -89,7 +89,9 @@ export default function NotificationsPage(props: NotificationsPageProps) {
   "metric_type": "{{metric_type}}",
   "bucket_time": "{{bucket_time}}",
   "threshold_mb": "{{threshold_mb}}",
+  "threshold_human_readable": "{{threshold_human_readable}}",
   "actual_mb": "{{actual_mb}}",
+  "actual_human_readable": "{{actual_human_readable}}",
   "alert_key": "{{alert_key}}"
 }`}
             />
@@ -107,7 +109,9 @@ export default function NotificationsPage(props: NotificationsPageProps) {
               <code> {"{{metric_type}}"}</code>
               <code> {"{{bucket_time}}"}</code>
               <code> {"{{threshold_mb}}"}</code>
+              <code> {"{{threshold_human_readable}}"}</code>
               <code> {"{{actual_mb}}"}</code>
+              <code> {"{{actual_human_readable}}"}</code>
               <code> {"{{alert_key}}"}</code>
             </p>
           </div>

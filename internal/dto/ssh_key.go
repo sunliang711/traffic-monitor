@@ -11,6 +11,10 @@ type GenerateSSHKeyReq struct {
 	Name string `json:"name" binding:"required"`
 }
 
+type RenameSSHKeyReq struct {
+	Name string `json:"name" binding:"required"`
+}
+
 type SSHKeyResp struct {
 	ID          uint      `json:"id"`
 	Name        string    `json:"name"`

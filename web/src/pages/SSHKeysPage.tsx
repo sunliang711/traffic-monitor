@@ -7,11 +7,17 @@ type SSHKeysPageProps = {
   sshKeys: SSHKey[];
   sshImportForm: SSHKeyImportState;
   sshGenerateForm: SSHKeyGenerateState;
+  renamingSSHKeyID: number | null;
+  sshRenameName: string;
   setSSHImportForm: React.Dispatch<React.SetStateAction<SSHKeyImportState>>;
   setSSHGenerateForm: React.Dispatch<React.SetStateAction<SSHKeyGenerateState>>;
   onImportSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onGenerateSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onDeleteSSHKey: (id: number) => void | Promise<void>;
+  onStartRenameSSHKey: (sshKey: SSHKey) => void;
+  onCancelRenameSSHKey: () => void;
+  setSSHRenameName: React.Dispatch<React.SetStateAction<string>>;
+  onRenameSSHKey: (sshKeyID: number) => void | Promise<void>;
 };
 
 export default function SSHKeysPage(props: SSHKeysPageProps) {
@@ -79,10 +85,45 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
             <article className="card" key={sshKey.id}>
               <div className="card-header">
                 <strong>{sshKey.name}</strong>
-                <button className="danger-button" onClick={() => void props.onDeleteSSHKey(sshKey.id)} type="button">
-                  删除
-                </button>
+                <div className="action-row">
+                  <button
+                    className="secondary-button"
+                    onClick={() => props.onStartRenameSSHKey(sshKey)}
+                    type="button"
+                  >
+                    重命名
+                  </button>
+                  <button className="danger-button" onClick={() => void props.onDeleteSSHKey(sshKey.id)} type="button">
+                    删除
+                  </button>
+                </div>
               </div>
+              {props.renamingSSHKeyID === sshKey.id ? (
+                <form
+                  className="form-grid"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void props.onRenameSSHKey(sshKey.id);
+                  }}
+                >
+                  <label className="field">
+                    <span>新名称</span>
+                    <input
+                      value={props.sshRenameName}
+                      onChange={(event) => props.setSSHRenameName(event.target.value)}
+                      placeholder="请输入新的 SSH Key 名称"
+                    />
+                  </label>
+                  <div className="action-row">
+                    <button className="primary-button" disabled={props.busy || !props.sshRenameName.trim()} type="submit">
+                      保存名称
+                    </button>
+                    <button className="secondary-button" onClick={props.onCancelRenameSSHKey} type="button">
+                      取消
+                    </button>
+                  </div>
+                </form>
+              ) : null}
               <p className="card-meta">
                 类型：{sshKey.key_type} / 来源：{sshKey.source_type}
               </p>

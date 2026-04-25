@@ -25,6 +25,12 @@ func defaultSources() []Source {
 			{Key: "security.app_master_key", EnvName: "APP_MASTER_KEY"},
 			{Key: "bootstrap.init_admin_username", EnvName: "INIT_ADMIN_USERNAME"},
 			{Key: "bootstrap.init_admin_password", EnvName: "INIT_ADMIN_PASSWORD"},
+			{Key: "history_cleanup.enabled", EnvName: "HISTORY_CLEANUP_ENABLED"},
+			{Key: "history_cleanup.interval", EnvName: "HISTORY_CLEANUP_INTERVAL"},
+			{Key: "history_cleanup.samples_days", EnvName: "HISTORY_CLEANUP_SAMPLES_DAYS"},
+			{Key: "history_cleanup.alerts_days", EnvName: "HISTORY_CLEANUP_ALERTS_DAYS"},
+			{Key: "history_cleanup.batch_size", EnvName: "HISTORY_CLEANUP_BATCH_SIZE"},
+			{Key: "history_cleanup.timeout", EnvName: "HISTORY_CLEANUP_TIMEOUT"},
 		}),
 	}
 }

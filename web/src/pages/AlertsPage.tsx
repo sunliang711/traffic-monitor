@@ -12,6 +12,8 @@ import {
 type AlertsPageProps = {
   alerts: AlertItem[];
   machineOptions: MachineOption[];
+  selectedMachineID: number | null;
+  onSelectMachine: (machineID: number | null) => void;
 };
 
 function notifyStatusBadgeClass(status: string) {
@@ -33,9 +35,26 @@ function notifyStatusBadgeClass(status: string) {
 }
 
 export default function AlertsPage(props: AlertsPageProps) {
+  const filteredAlerts = props.alerts.filter(
+    (alert) => !props.selectedMachineID || alert.machine_id === props.selectedMachineID,
+  );
+
   return (
     <section className="panel">
-      <h3 className="panel-title">告警记录</h3>
+      <div className="panel-header-inline">
+        <h3 className="panel-title">告警记录</h3>
+        <select
+          value={props.selectedMachineID ?? ""}
+          onChange={(event) => props.onSelectMachine(event.target.value ? Number(event.target.value) : null)}
+        >
+          <option value="">全部机器</option>
+          {props.machineOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="table-wrapper">
         <table>
           <thead>
@@ -51,7 +70,7 @@ export default function AlertsPage(props: AlertsPageProps) {
             </tr>
           </thead>
           <tbody>
-            {props.alerts.map((alert) => {
+            {filteredAlerts.map((alert) => {
               const machine = machineDisplay(props.machineOptions, alert.machine_id);
 
               return (

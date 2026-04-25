@@ -13,16 +13,19 @@ import (
 
 type TrafficSampleHandler struct {
 	trafficCollectionService *service.TrafficCollectionService
+	historyCleanupService    *service.HistoryCleanupService
 }
 
-func NewTrafficSampleHandler(trafficCollectionService *service.TrafficCollectionService) *TrafficSampleHandler {
+func NewTrafficSampleHandler(trafficCollectionService *service.TrafficCollectionService, historyCleanupService *service.HistoryCleanupService) *TrafficSampleHandler {
 	return &TrafficSampleHandler{
 		trafficCollectionService: trafficCollectionService,
+		historyCleanupService:    historyCleanupService,
 	}
 }
 
 func (handler *TrafficSampleHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup) {
 	authenticatedGroup.GET("/traffic-samples", handler.ListSamples)
+	authenticatedGroup.POST("/traffic-samples/cleanup", handler.CleanupHistory)
 	authenticatedGroup.POST("/system/collect-now", handler.CollectNow)
 }
 
@@ -56,6 +59,26 @@ func (handler *TrafficSampleHandler) CollectNow(ctx *gin.Context) {
 	response, err := handler.trafficCollectionService.CollectNow(ctx.Request.Context(), req.MachineID)
 	if err != nil {
 		handleTrafficCollectionError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dto.Response{
+		Code:    http.StatusOK,
+		Data:    response,
+		Message: "success",
+	})
+}
+
+func (handler *TrafficSampleHandler) CleanupHistory(ctx *gin.Context) {
+	var req dto.CleanupHistoryReq
+	if err := ctx.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		badRequest(ctx, "invalid request")
+		return
+	}
+
+	response, err := handler.historyCleanupService.Cleanup(ctx.Request.Context(), req)
+	if err != nil {
+		handleHistoryCleanupError(ctx, err)
 		return
 	}
 
@@ -106,6 +129,25 @@ func handleTrafficCollectionError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusNotFound, dto.Response{Code: http.StatusNotFound, Data: nil, Message: "machine not found"})
 	case errors.Is(err, service.ErrSSHKeyNotFound):
 		ctx.JSON(http.StatusBadRequest, dto.Response{Code: http.StatusBadRequest, Data: nil, Message: "ssh key not found"})
+	default:
+		internalServerError(ctx)
+	}
+}
+
+func handleHistoryCleanupError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidHistoryCleanupRequest):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid history cleanup request",
+		})
+	case errors.Is(err, service.ErrMachineNotFound):
+		ctx.JSON(http.StatusNotFound, dto.Response{
+			Code:    http.StatusNotFound,
+			Data:    nil,
+			Message: "machine not found",
+		})
 	default:
 		internalServerError(ctx)
 	}

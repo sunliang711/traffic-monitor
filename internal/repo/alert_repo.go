@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"traffic-monitor/internal/model"
 
@@ -19,6 +20,12 @@ type AlertFilter struct {
 	PeriodType string
 	Page       int
 	PageSize   int
+}
+
+type AlertDeleteFilter struct {
+	MachineID        *uint
+	BeforeBucketTime time.Time
+	Limit            int
 }
 
 func NewAlertRepo(db *gorm.DB) *AlertRepo {
@@ -46,6 +53,43 @@ func (repo *AlertRepo) UpdateNotifyStatus(ctx context.Context, alertID uint, not
 	}
 
 	return nil
+}
+
+func (repo *AlertRepo) DeleteExpired(ctx context.Context, filter AlertDeleteFilter) (int64, error) {
+	if filter.BeforeBucketTime.IsZero() {
+		return 0, fmt.Errorf("before bucket time is required")
+	}
+
+	query := repo.db.WithContext(ctx).Model(&model.Alert{}).Where("bucket_time < ?", filter.BeforeBucketTime)
+	if filter.MachineID != nil {
+		query = query.Where("machine_id = ?", *filter.MachineID)
+	}
+
+	if filter.Limit > 0 {
+		subQuery := repo.db.WithContext(ctx).
+			Model(&model.Alert{}).
+			Select("id").
+			Where("bucket_time < ?", filter.BeforeBucketTime).
+			Order("bucket_time asc").
+			Limit(filter.Limit)
+		if filter.MachineID != nil {
+			subQuery = subQuery.Where("machine_id = ?", *filter.MachineID)
+		}
+
+		result := repo.db.WithContext(ctx).Where("id IN (?)", subQuery).Delete(&model.Alert{})
+		if result.Error != nil {
+			return 0, fmt.Errorf("delete expired alerts: %w", result.Error)
+		}
+
+		return result.RowsAffected, nil
+	}
+
+	result := query.Delete(&model.Alert{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("delete expired alerts: %w", result.Error)
+	}
+
+	return result.RowsAffected, nil
 }
 
 func (repo *AlertRepo) List(ctx context.Context, filter AlertFilter) ([]model.Alert, int64, error) {

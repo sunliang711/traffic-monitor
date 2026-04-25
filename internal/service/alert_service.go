@@ -546,16 +546,18 @@ func (service *AlertService) buildWebhookTemplateData(ctx context.Context, alert
 	}
 
 	return map[string]interface{}{
-		"machine_id":          alert.MachineID,
-		"machine_name":        machineName,
-		"machine_host":        machineHost,
-		"period_type":         alert.PeriodType,
-		"metric_type":         alert.MetricType,
-		"bucket_time":         alert.BucketTime,
-		"bucket_time_rfc3339": alert.BucketTime.UTC().Format(time.RFC3339),
-		"threshold_mb":        alert.ThresholdMB,
-		"actual_mb":           alert.ActualMB,
-		"alert_key":           alert.AlertKey,
+		"machine_id":                 alert.MachineID,
+		"machine_name":               machineName,
+		"machine_host":               machineHost,
+		"period_type":                alert.PeriodType,
+		"metric_type":                alert.MetricType,
+		"bucket_time":                alert.BucketTime,
+		"bucket_time_rfc3339":        alert.BucketTime.UTC().Format(time.RFC3339),
+		"threshold_mb":               alert.ThresholdMB,
+		"threshold_human_readable":   formatTrafficMB(alert.ThresholdMB),
+		"actual_mb":                  alert.ActualMB,
+		"actual_human_readable":      formatTrafficMB(alert.ActualMB),
+		"alert_key":                  alert.AlertKey,
 	}
 }
 
@@ -596,15 +598,17 @@ func (service *AlertService) renderWebhookRequest(ctx context.Context, configJSO
 	}
 
 	defaultPayload, err := json.Marshal(map[string]interface{}{
-		"machine_id":   alert.MachineID,
-		"machine_name": templateData["machine_name"],
-		"machine_host": templateData["machine_host"],
-		"period_type":  alert.PeriodType,
-		"metric_type":  alert.MetricType,
-		"bucket_time":  alert.BucketTime,
-		"threshold_mb": alert.ThresholdMB,
-		"actual_mb":    alert.ActualMB,
-		"alert_key":    alert.AlertKey,
+		"machine_id":               alert.MachineID,
+		"machine_name":             templateData["machine_name"],
+		"machine_host":             templateData["machine_host"],
+		"period_type":              alert.PeriodType,
+		"metric_type":              alert.MetricType,
+		"bucket_time":              alert.BucketTime,
+		"threshold_mb":             alert.ThresholdMB,
+		"threshold_human_readable": templateData["threshold_human_readable"],
+		"actual_mb":                alert.ActualMB,
+		"actual_human_readable":    templateData["actual_human_readable"],
+		"alert_key":                alert.AlertKey,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("marshal webhook payload: %w", err)
@@ -678,7 +682,9 @@ func normalizeWebhookTemplate(raw string) string {
 		"{{bucket_time}}", "{{.bucket_time}}",
 		"{{bucket_time_rfc3339}}", "{{.bucket_time_rfc3339}}",
 		"{{threshold_mb}}", "{{.threshold_mb}}",
+		"{{threshold_human_readable}}", "{{.threshold_human_readable}}",
 		"{{actual_mb}}", "{{.actual_mb}}",
+		"{{actual_human_readable}}", "{{.actual_human_readable}}",
 		"{{alert_key}}", "{{.alert_key}}",
 	)
 
@@ -712,8 +718,20 @@ func trimMessage(message string) string {
 
 func maskToken(token string) string {
 	if len(token) <= 8 {
-		return ""
+		return token
 	}
 
-	return token[:4] + "****" + token[len(token)-4:]
+	return token[:4] + "..." + token[len(token)-4:]
+}
+
+func formatTrafficMB(valueMB float64) string {
+	if valueMB >= 1024*1024 {
+		return fmt.Sprintf("%.3f TB", valueMB/(1024*1024))
+	}
+
+	if valueMB >= 1024 {
+		return fmt.Sprintf("%.3f GB", valueMB/1024)
+	}
+
+	return fmt.Sprintf("%.3f MB", valueMB)
 }

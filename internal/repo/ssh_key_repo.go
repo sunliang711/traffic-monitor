@@ -43,6 +43,22 @@ func (repo *SSHKeyRepo) GetByID(ctx context.Context, sshKeyID uint) (*model.SSHK
 	return &sshKey, nil
 }
 
+func (repo *SSHKeyRepo) UpdateName(ctx context.Context, sshKeyID uint, name string) (*model.SSHKey, error) {
+	if err := repo.db.WithContext(ctx).
+		Model(&model.SSHKey{}).
+		Where("id = ?", sshKeyID).
+		Update("name", name).Error; err != nil {
+		return nil, fmt.Errorf("update ssh key name: %w", err)
+	}
+
+	sshKey, err := repo.GetByID(ctx, sshKeyID)
+	if err != nil {
+		return nil, fmt.Errorf("get ssh key after rename: %w", err)
+	}
+
+	return sshKey, nil
+}
+
 func (repo *SSHKeyRepo) DeleteByID(ctx context.Context, sshKeyID uint) error {
 	if err := repo.db.WithContext(ctx).Delete(&model.SSHKey{}, sshKeyID).Error; err != nil {
 		return fmt.Errorf("delete ssh key: %w", err)

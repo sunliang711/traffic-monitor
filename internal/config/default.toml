@@ -41,3 +41,11 @@ app_master_key = ""
 [bootstrap]
 init_admin_username = ""
 init_admin_password = ""
+
+[history_cleanup]
+enabled = true
+interval = "1h"
+samples_days = 3
+alerts_days = 3
+batch_size = 1000
+timeout = "30s"

@@ -26,6 +26,7 @@ func (handler *SSHKeyHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup
 	authenticatedGroup.POST("/ssh-keys/import", handler.Import)
 	authenticatedGroup.POST("/ssh-keys/generate", handler.Generate)
 	authenticatedGroup.GET("/ssh-keys/:id/public-key", handler.GetPublicKey)
+	authenticatedGroup.PATCH("/ssh-keys/:id", handler.Rename)
 	authenticatedGroup.DELETE("/ssh-keys/:id", handler.Delete)
 }
 
@@ -149,6 +150,53 @@ func (handler *SSHKeyHandler) GetPublicKey(ctx *gin.Context) {
 	})
 }
 
+func (handler *SSHKeyHandler) Rename(ctx *gin.Context) {
+	sshKeyID, err := parseUintParam(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid ssh key id",
+		})
+		return
+	}
+
+	var req dto.RenameSSHKeyReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid request",
+		})
+		return
+	}
+
+	sshKey, err := handler.sshKeyService.Rename(ctx.Request.Context(), sshKeyID, req.Name)
+	if err != nil {
+		if errors.Is(err, service.ErrSSHKeyNotFound) {
+			ctx.JSON(http.StatusNotFound, dto.Response{
+				Code:    http.StatusNotFound,
+				Data:    nil,
+				Message: "ssh key not found",
+			})
+			return
+		}
+
+		ctx.JSON(http.StatusInternalServerError, dto.Response{
+			Code:    http.StatusInternalServerError,
+			Data:    nil,
+			Message: "internal server error",
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dto.Response{
+		Code:    http.StatusOK,
+		Data:    sshKey,
+		Message: "success",
+	})
+}
+
 func (handler *SSHKeyHandler) Delete(ctx *gin.Context) {
 	sshKeyID, err := parseUintParam(ctx.Param("id"))
 	if err != nil {
@@ -161,6 +209,15 @@ func (handler *SSHKeyHandler) Delete(ctx *gin.Context) {
 	}
 
 	if err := handler.sshKeyService.Delete(ctx.Request.Context(), sshKeyID); err != nil {
+		if errors.Is(err, service.ErrSSHKeyInUse) {
+			ctx.JSON(http.StatusConflict, dto.Response{
+				Code:    http.StatusConflict,
+				Data:    nil,
+				Message: "ssh key is still referenced by machines; please update or remove those machines first",
+			})
+			return
+		}
+
 		ctx.JSON(http.StatusInternalServerError, dto.Response{
 			Code:    http.StatusInternalServerError,
 			Data:    nil,

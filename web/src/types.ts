@@ -110,3 +110,10 @@ export type WebhookTestResponse = {
   rendered_headers?: Record<string, string>;
   rendered_body?: string;
 };
+
+export type CleanupHistoryResponse = {
+  deleted_samples: number;
+  deleted_alerts: number;
+  samples_cutoff: string;
+  alerts_cutoff: string;
+};

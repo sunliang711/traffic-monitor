@@ -6,15 +6,16 @@ import (
 )
 
 type Config struct {
-	App       AppConfig       `mapstructure:"app"`
-	Collector CollectorConfig `mapstructure:"collector"`
-	HTTP      HTTPConfig      `mapstructure:"http"`
-	Database  DatabaseConfig  `mapstructure:"database"`
-	Log       LogConfig       `mapstructure:"log"`
-	Session   SessionConfig   `mapstructure:"session"`
-	SSH       SSHConfig       `mapstructure:"ssh"`
-	Security  SecurityConfig  `mapstructure:"security"`
-	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
+	App            AppConfig            `mapstructure:"app"`
+	Collector      CollectorConfig      `mapstructure:"collector"`
+	HistoryCleanup HistoryCleanupConfig `mapstructure:"history_cleanup"`
+	HTTP           HTTPConfig           `mapstructure:"http"`
+	Database       DatabaseConfig       `mapstructure:"database"`
+	Log            LogConfig            `mapstructure:"log"`
+	Session        SessionConfig        `mapstructure:"session"`
+	SSH            SSHConfig            `mapstructure:"ssh"`
+	Security       SecurityConfig       `mapstructure:"security"`
+	Bootstrap      BootstrapConfig      `mapstructure:"bootstrap"`
 }
 
 type AppConfig struct {
@@ -27,6 +28,15 @@ type CollectorConfig struct {
 	Interval   time.Duration `mapstructure:"interval"`
 	MaxWorkers int           `mapstructure:"max_workers"`
 	RetryTimes int           `mapstructure:"retry_times"`
+}
+
+type HistoryCleanupConfig struct {
+	Enabled      bool          `mapstructure:"enabled"`
+	Interval     time.Duration `mapstructure:"interval"`
+	SamplesDays  int           `mapstructure:"samples_days"`
+	AlertsDays   int           `mapstructure:"alerts_days"`
+	BatchSize    int           `mapstructure:"batch_size"`
+	Timeout      time.Duration `mapstructure:"timeout"`
 }
 
 type HTTPConfig struct {
@@ -90,6 +100,28 @@ func (cfg Config) Validate() error {
 
 	if cfg.Collector.RetryTimes < 0 {
 		return fmt.Errorf("collector.retry_times must be greater than or equal to zero")
+	}
+
+	if cfg.HistoryCleanup.Enabled {
+		if cfg.HistoryCleanup.Interval <= 0 {
+			return fmt.Errorf("history_cleanup.interval must be greater than zero")
+		}
+
+		if cfg.HistoryCleanup.SamplesDays <= 0 {
+			return fmt.Errorf("history_cleanup.samples_days must be greater than zero")
+		}
+
+		if cfg.HistoryCleanup.AlertsDays <= 0 {
+			return fmt.Errorf("history_cleanup.alerts_days must be greater than zero")
+		}
+
+		if cfg.HistoryCleanup.BatchSize <= 0 {
+			return fmt.Errorf("history_cleanup.batch_size must be greater than zero")
+		}
+
+		if cfg.HistoryCleanup.Timeout <= 0 {
+			return fmt.Errorf("history_cleanup.timeout must be greater than zero")
+		}
 	}
 
 	if cfg.Database.DSN == "" {
@@ -161,6 +193,10 @@ func ProvideAppConfig(cfg Config) AppConfig {
 
 func ProvideCollectorConfig(cfg Config) CollectorConfig {
 	return cfg.Collector
+}
+
+func ProvideHistoryCleanupConfig(cfg Config) HistoryCleanupConfig {
+	return cfg.HistoryCleanup
 }
 
 func ProvideHTTPConfig(cfg Config) HTTPConfig {

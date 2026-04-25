@@ -51,6 +51,18 @@ func (repo *MachineRepo) Update(ctx context.Context, machine *model.Machine) err
 	return nil
 }
 
+func (repo *MachineRepo) ListBySSHKeyID(ctx context.Context, sshKeyID uint) ([]model.Machine, error) {
+	var machines []model.Machine
+	if err := repo.db.WithContext(ctx).
+		Where("ssh_key_id = ?", sshKeyID).
+		Order("id desc").
+		Find(&machines).Error; err != nil {
+		return nil, fmt.Errorf("list machines by ssh key id: %w", err)
+	}
+
+	return machines, nil
+}
+
 func (repo *MachineRepo) DeleteByID(ctx context.Context, machineID uint) error {
 	if err := repo.db.WithContext(ctx).Delete(&model.Machine{}, machineID).Error; err != nil {
 		return fmt.Errorf("delete machine: %w", err)
