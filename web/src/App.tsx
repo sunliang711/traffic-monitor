@@ -188,7 +188,7 @@ function App() {
   }, [profile]);
 
   useEffect(() => {
-    setMachineThresholdsSaved(false);
+    setMachineThresholdsSaved(true);
     if (!selectedMachineID || !profile) {
       setMachineThresholdForm(emptyThresholdRows());
       return;
@@ -655,7 +655,11 @@ function App() {
                     placeholder="粘贴 OpenSSH 私钥"
                   />
                 </label>
-                <button className="primary-button" disabled={busy} type="submit">
+                <button
+                  className="primary-button"
+                  disabled={busy || !sshImportForm.name.trim() || !sshImportForm.privateKey.trim()}
+                  type="submit"
+                >
                   导入
                 </button>
               </form>
