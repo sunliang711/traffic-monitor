@@ -79,6 +79,7 @@ function AppIcon() {
 type ProtectedDataLoadOptions = {
   samplesPage?: number;
   sampleMachineID?: number | null;
+  samplePeriodType?: string;
   samplesPageSize?: number;
   alertsPage?: number;
   alertMachineID?: number | null;
@@ -123,6 +124,7 @@ function App() {
 
   const [selectedThresholdMachineID, setSelectedThresholdMachineID] = useState<number | null>(null);
   const [selectedSampleMachineID, setSelectedSampleMachineID] = useState<number | null>(null);
+  const [selectedSamplePeriodType, setSelectedSamplePeriodType] = useState("");
   const [selectedAlertMachineID, setSelectedAlertMachineID] = useState<number | null>(null);
   const [editingMachineID, setEditingMachineID] = useState<number | null>(null);
   const [machineForm, setMachineForm] = useState<MachineFormState>(emptyMachineForm());
@@ -235,9 +237,10 @@ function App() {
     }
   }
 
-  function trafficSamplesPath(page: number, machineID: number | null, pageSize = samplesPageSize) {
+  function trafficSamplesPath(page: number, machineID: number | null, pageSize = samplesPageSize, periodType = selectedSamplePeriodType) {
     return withQuery("/api/v1/traffic-samples", {
       machine_id: machineID,
+      period_type: periodType,
       page,
       page_size: pageSize,
     });
@@ -251,11 +254,11 @@ function App() {
     });
   }
 
-  async function loadSamplesPage(page = samplesPage, machineID = selectedSampleMachineID, pageSize = samplesPageSize) {
+  async function loadSamplesPage(page = samplesPage, machineID = selectedSampleMachineID, pageSize = samplesPageSize, periodType = selectedSamplePeriodType) {
     setBusy(true);
     setError("");
     try {
-      const response = await get<TrafficSampleList>(trafficSamplesPath(page, machineID, pageSize));
+      const response = await get<TrafficSampleList>(trafficSamplesPath(page, machineID, pageSize, periodType));
       setSamples(response.items);
       setSamplesTotal(response.total);
     } catch (loadError) {
@@ -283,6 +286,8 @@ function App() {
     const nextSamplesPage = options.samplesPage ?? samplesPage;
     const nextSampleMachineID =
       options.sampleMachineID !== undefined ? options.sampleMachineID : selectedSampleMachineID;
+    const nextSamplePeriodType =
+      options.samplePeriodType !== undefined ? options.samplePeriodType : selectedSamplePeriodType;
     const nextSamplesPageSize = options.samplesPageSize ?? samplesPageSize;
     const nextAlertsPage = options.alertsPage ?? alertsPage;
     const nextAlertMachineID = options.alertMachineID !== undefined ? options.alertMachineID : selectedAlertMachineID;
@@ -296,7 +301,7 @@ function App() {
         get<Machine[]>("/api/v1/machines"),
         get<ThresholdRule[]>("/api/v1/thresholds/global"),
         get<NotificationChannel[]>("/api/v1/notification-channels"),
-        get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID, nextSamplesPageSize)),
+        get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID, nextSamplesPageSize, nextSamplePeriodType)),
         get<AlertList>(alertsPath(nextAlertsPage, nextAlertMachineID, nextAlertsPageSize)),
       ]);
 
@@ -746,6 +751,12 @@ function App() {
     await loadSamplesPage(1, machineID);
   }
 
+  async function handleSelectSamplePeriodType(periodType: string) {
+    setSelectedSamplePeriodType(periodType);
+    setSamplesPage(1);
+    await loadSamplesPage(1, selectedSampleMachineID, samplesPageSize, periodType);
+  }
+
   async function handleSamplesPageChange(page: number) {
     setSamplesPage(page);
     await loadSamplesPage(page, selectedSampleMachineID);
@@ -1061,6 +1072,7 @@ function App() {
               <SamplesPage
                 busy={busy}
                 selectedMachineID={selectedSampleMachineID}
+                selectedPeriodType={selectedSamplePeriodType}
                 machineOptions={machineOptions}
                 samples={samples}
                 total={samplesTotal}
@@ -1068,6 +1080,7 @@ function App() {
                 pageSize={samplesPageSize}
                 collectResults={collectResults}
                 onSelectMachine={(machineID) => void handleSelectSampleMachine(machineID)}
+                onSelectPeriodType={(periodType) => void handleSelectSamplePeriodType(periodType)}
                 onPageChange={(page) => void handleSamplesPageChange(page)}
                 onPageSizeChange={(pageSize) => void handleSamplesPageSizeChange(pageSize)}
                 onCollectCurrentMachine={(machineID) => void handleCollectNow(machineID)}

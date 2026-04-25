@@ -8,6 +8,7 @@ import PageSizeSelect from "../components/PageSizeSelect";
 type SamplesPageProps = {
   busy: boolean;
   selectedMachineID: number | null;
+  selectedPeriodType: string;
   machineOptions: MachineOption[];
   samples: TrafficSample[];
   total: number;
@@ -15,6 +16,7 @@ type SamplesPageProps = {
   pageSize: number;
   collectResults: CollectNowResponse["results"];
   onSelectMachine: (machineID: number | null) => void | Promise<void>;
+  onSelectPeriodType: (periodType: string) => void | Promise<void>;
   onPageChange: (page: number) => void | Promise<void>;
   onPageSizeChange: (pageSize: number) => void | Promise<void>;
   onCollectCurrentMachine: (machineID: number) => void;
@@ -46,7 +48,7 @@ export default function SamplesPage(props: SamplesPageProps) {
           <p className="section-description">{t("samplesPageDescription")}</p>
         </div>
         <div className="toolbar-row">
-          <div className="toolbar-filters">
+          <div className="toolbar-filters sample-toolbar-filters">
             <select
               value={props.selectedMachineID ?? ""}
               onChange={(event) => void props.onSelectMachine(event.target.value ? Number(event.target.value) : null)}
@@ -57,6 +59,15 @@ export default function SamplesPage(props: SamplesPageProps) {
                   {option.label}
                 </option>
               ))}
+            </select>
+            <select
+              aria-label={t("thresholdPeriod")}
+              value={props.selectedPeriodType}
+              onChange={(event) => void props.onSelectPeriodType(event.target.value)}
+            >
+              <option value="">{t("samplesAllPeriods")}</option>
+              <option value="hourly">{formatPeriodType("hourly", language)}</option>
+              <option value="daily">{formatPeriodType("daily", language)}</option>
             </select>
           </div>
           {props.selectedMachineID ? (
