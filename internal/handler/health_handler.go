@@ -19,13 +19,6 @@ func NewHealthHandler(healthService *service.HealthService) *HealthHandler {
 	}
 }
 
-func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler) {
-	engine.GET("/healthz", healthHandler.GetHealth)
-
-	apiGroup := engine.Group("/api/v1")
-	apiGroup.GET("/health", healthHandler.GetHealth)
-}
-
 func (handler *HealthHandler) GetHealth(ctx *gin.Context) {
 	response, err := handler.healthService.Check(ctx.Request.Context())
 	if err != nil {

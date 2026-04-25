@@ -1,3 +1,3 @@
-# traffic-monitor2
+# traffic-monitor
 
 Project description.

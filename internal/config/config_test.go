@@ -33,9 +33,11 @@ level = "debug"
 
 	require.NoError(t, os.Setenv("HTTP_ADDR", ":10080"))
 	require.NoError(t, os.Setenv("POSTGRES_DSN", "postgres://from-env"))
+	require.NoError(t, os.Setenv("SESSION_SECRET", "test-session-secret"))
 	t.Cleanup(func() {
 		_ = os.Unsetenv("HTTP_ADDR")
 		_ = os.Unsetenv("POSTGRES_DSN")
+		_ = os.Unsetenv("SESSION_SECRET")
 	})
 
 	loader := NewLoader([]Source{
@@ -45,6 +47,7 @@ level = "debug"
 		NewEnvSource("environment", []EnvBinding{
 			{Key: "http.addr", EnvName: "HTTP_ADDR"},
 			{Key: "database.dsn", EnvName: "POSTGRES_DSN"},
+			{Key: "session.secret", EnvName: "SESSION_SECRET"},
 		}),
 	})
 
@@ -56,6 +59,7 @@ level = "debug"
 	require.Equal(t, 30, cfg.Database.MaxOpenConns)
 	require.Equal(t, "debug", cfg.Log.Level)
 	require.Equal(t, 10*time.Second, cfg.HTTP.ReadTimeout)
+	require.Equal(t, "test-session-secret", cfg.Session.Secret)
 }
 
 func TestLoaderLoad_ReturnsValidationErrorWhenRequiredValueMissing(t *testing.T) {

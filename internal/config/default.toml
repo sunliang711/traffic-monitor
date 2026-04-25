@@ -17,3 +17,13 @@ ping_timeout = "5s"
 
 [log]
 level = "info"
+
+[session]
+secret = ""
+cookie_name = "traffic_monitor_session"
+max_age = "24h"
+secure = false
+
+[bootstrap]
+init_admin_username = ""
+init_admin_password = ""

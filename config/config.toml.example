@@ -1,2 +1,11 @@
 [database]
 dsn = "host=127.0.0.1 user=postgres password=postgres dbname=traffic_monitor port=5432 sslmode=disable"
+
+[session]
+# Prefer environment variable SESSION_SECRET in runtime.
+secret = "replace-with-session-secret"
+
+[bootstrap]
+# Prefer environment variables INIT_ADMIN_USERNAME and INIT_ADMIN_PASSWORD in runtime.
+init_admin_username = "admin"
+init_admin_password = "replace-with-admin-password"

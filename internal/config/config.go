@@ -6,10 +6,12 @@ import (
 )
 
 type Config struct {
-	App      AppConfig      `mapstructure:"app"`
-	HTTP     HTTPConfig     `mapstructure:"http"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Log      LogConfig      `mapstructure:"log"`
+	App       AppConfig       `mapstructure:"app"`
+	HTTP      HTTPConfig      `mapstructure:"http"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	Log       LogConfig       `mapstructure:"log"`
+	Session   SessionConfig   `mapstructure:"session"`
+	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
 }
 
 type AppConfig struct {
@@ -34,6 +36,18 @@ type DatabaseConfig struct {
 
 type LogConfig struct {
 	Level string `mapstructure:"level"`
+}
+
+type SessionConfig struct {
+	Secret     string        `mapstructure:"secret"`
+	CookieName string        `mapstructure:"cookie_name"`
+	MaxAge     time.Duration `mapstructure:"max_age"`
+	Secure     bool          `mapstructure:"secure"`
+}
+
+type BootstrapConfig struct {
+	InitAdminUsername string `mapstructure:"init_admin_username"`
+	InitAdminPassword string `mapstructure:"init_admin_password"`
 }
 
 func NewConfig() (Config, error) {
@@ -78,6 +92,22 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("http.stop_timeout must be greater than zero")
 	}
 
+	if cfg.Session.Secret == "" {
+		return fmt.Errorf("session.secret is required")
+	}
+
+	if cfg.Session.CookieName == "" {
+		return fmt.Errorf("session.cookie_name is required")
+	}
+
+	if cfg.Session.MaxAge <= 0 {
+		return fmt.Errorf("session.max_age must be greater than zero")
+	}
+
+	if (cfg.Bootstrap.InitAdminUsername == "") != (cfg.Bootstrap.InitAdminPassword == "") {
+		return fmt.Errorf("bootstrap init admin username and password must be configured together")
+	}
+
 	return nil
 }
 
@@ -95,4 +125,12 @@ func ProvideDatabaseConfig(cfg Config) DatabaseConfig {
 
 func ProvideLogConfig(cfg Config) LogConfig {
 	return cfg.Log
+}
+
+func ProvideSessionConfig(cfg Config) SessionConfig {
+	return cfg.Session
+}
+
+func ProvideBootstrapConfig(cfg Config) BootstrapConfig {
+	return cfg.Bootstrap
 }
