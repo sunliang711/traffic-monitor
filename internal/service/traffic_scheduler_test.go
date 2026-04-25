@@ -112,3 +112,31 @@ func TestTrafficSchedulerRetriesFailedJobs(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 2, value.(int))
 }
+
+func TestTrafficSchedulerContinuesAfterStartContextCanceled(t *testing.T) {
+	runner := &stubTrafficCollectRunner{
+		machines: []model.Machine{
+			{Base: model.Base{ID: 1}},
+		},
+		failures: map[uint]int{},
+	}
+
+	scheduler := NewTrafficScheduler(config.CollectorConfig{
+		Enabled:    true,
+		Interval:   40 * time.Millisecond,
+		MaxWorkers: 1,
+		RetryTimes: 0,
+	}, runner, zerolog.Nop())
+
+	startContext, cancel := context.WithCancel(context.Background())
+	scheduler.Start(startContext)
+	cancel()
+
+	time.Sleep(120 * time.Millisecond)
+	scheduler.Stop()
+	scheduler.Wait()
+
+	value, ok := runner.calls.Load(uint(1))
+	require.True(t, ok)
+	require.GreaterOrEqual(t, value.(int), 2)
+}

@@ -2,8 +2,8 @@ package config
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 )
 
@@ -16,18 +16,26 @@ func NewLoader(sources []Source) Loader {
 }
 
 func (loader Loader) Load() (Config, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigType("toml")
-	viperInstance.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	return LoadWithSources(loader.sources...)
+}
 
-	for _, source := range loader.sources {
-		if err := source.Load(viperInstance); err != nil {
-			return Config{}, fmt.Errorf("load config source %s: %w", source.Name(), err)
+func LoadWithSources(sources ...Source) (Config, error) {
+	viperInstance := viper.New()
+
+	for _, source := range sources {
+		if err := source.Apply(viperInstance); err != nil {
+			return Config{}, fmt.Errorf("apply %s source: %w", source.Name(), err)
 		}
 	}
 
 	var cfg Config
-	if err := viperInstance.Unmarshal(&cfg); err != nil {
+	if err := viperInstance.Unmarshal(&cfg, func(decoderConfig *mapstructure.DecoderConfig) {
+		decoderConfig.TagName = "mapstructure"
+		decoderConfig.DecodeHook = mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+		)
+	}); err != nil {
 		return Config{}, fmt.Errorf("unmarshal config: %w", err)
 	}
 

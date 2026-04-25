@@ -31,12 +31,12 @@ type CollectorConfig struct {
 }
 
 type HistoryCleanupConfig struct {
-	Enabled      bool          `mapstructure:"enabled"`
-	Interval     time.Duration `mapstructure:"interval"`
-	SamplesDays  int           `mapstructure:"samples_days"`
-	AlertsDays   int           `mapstructure:"alerts_days"`
-	BatchSize    int           `mapstructure:"batch_size"`
-	Timeout      time.Duration `mapstructure:"timeout"`
+	Enabled     bool          `mapstructure:"enabled"`
+	Interval    time.Duration `mapstructure:"interval"`
+	SamplesDays int           `mapstructure:"samples_days"`
+	AlertsDays  int           `mapstructure:"alerts_days"`
+	BatchSize   int           `mapstructure:"batch_size"`
+	Timeout     time.Duration `mapstructure:"timeout"`
 }
 
 type HTTPConfig struct {
@@ -81,8 +81,12 @@ type BootstrapConfig struct {
 }
 
 func NewConfig() (Config, error) {
-	loader := NewLoader(defaultSources())
-	return loader.Load()
+	return LoadWithSources(
+		NewEmbeddedFileSource("config/default.toml", defaultConfigFS, "default.toml"),
+		NewFileSource("config/config.toml", "config/config.toml", true),
+		NewFileSource("config/private.toml", "config/private.toml", true),
+		NewEnvSource("env", defaultEnvBindings()),
+	)
 }
 
 func (cfg Config) Validate() error {

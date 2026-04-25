@@ -3,28 +3,27 @@ package config
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
 
 type Source interface {
 	Name() string
-	Load(viperInstance *viper.Viper) error
+	Apply(viperInstance *viper.Viper) error
 }
 
-type EmbeddedFileSource struct {
-	name     string
-	fileName string
-	fileSet  embed.FS
+type bytesSource struct {
+	name string
+	data []byte
 }
 
-type FileSource struct {
-	name     string
-	filePath string
+type fileSource struct {
+	path     string
 	optional bool
 }
 
@@ -33,95 +32,112 @@ type EnvBinding struct {
 	EnvName string
 }
 
-type EnvSource struct {
-	name     string
+type envSource struct {
+	prefix   string
 	bindings []EnvBinding
 }
 
-func NewEmbeddedFileSource(name string, fileSet embed.FS, fileName string) EmbeddedFileSource {
-	return EmbeddedFileSource{
-		name:     name,
-		fileName: fileName,
-		fileSet:  fileSet,
+type sourceError struct {
+	name string
+	err  error
+}
+
+func NewEmbeddedFileSource(name string, fileSet embed.FS, fileName string) Source {
+	fileContent, err := fileSet.ReadFile(fileName)
+	if err != nil {
+		return sourceError{
+			name: name,
+			err:  fmt.Errorf("read embedded file: %w", err),
+		}
+	}
+
+	return bytesSource{
+		name: name,
+		data: fileContent,
 	}
 }
 
-func (source EmbeddedFileSource) Name() string {
+func (source bytesSource) Name() string {
 	return source.name
 }
 
-func (source EmbeddedFileSource) Load(viperInstance *viper.Viper) error {
-	fileContent, err := source.fileSet.ReadFile(source.fileName)
-	if err != nil {
-		return fmt.Errorf("read embedded file: %w", err)
-	}
-
-	if err := viperInstance.MergeConfig(bytes.NewReader(fileContent)); err != nil {
+func (source bytesSource) Apply(viperInstance *viper.Viper) error {
+	viperInstance.SetConfigType("toml")
+	if err := viperInstance.MergeConfig(bytes.NewReader(source.data)); err != nil {
 		return fmt.Errorf("merge embedded config: %w", err)
 	}
 
 	return nil
 }
 
-func NewFileSource(name string, filePath string, optional bool) FileSource {
-	return FileSource{
-		name:     name,
-		filePath: filePath,
+func NewFileSource(_ string, filePath string, optional bool) Source {
+	return fileSource{
+		path:     filePath,
 		optional: optional,
 	}
 }
 
-func (source FileSource) Name() string {
-	return source.name
+func (source fileSource) Name() string {
+	return source.path
 }
 
-func (source FileSource) Load(viperInstance *viper.Viper) error {
-	file, err := os.Open(filepath.Clean(source.filePath))
+func (source fileSource) Apply(viperInstance *viper.Viper) error {
+	file, err := os.Open(filepath.Clean(source.path))
 	if err != nil {
-		if source.optional && os.IsNotExist(err) {
+		if source.optional && errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
 
-		return fmt.Errorf("open file %s: %w", source.filePath, err)
+		return fmt.Errorf("open file %s: %w", source.path, err)
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 
-	if err := mergeFromReader(viperInstance, file); err != nil {
-		return fmt.Errorf("merge file %s: %w", source.filePath, err)
+	viperInstance.SetConfigType("toml")
+	if err := viperInstance.MergeConfig(file); err != nil {
+		return fmt.Errorf("merge file %s: %w", source.path, err)
 	}
 
 	return nil
 }
 
-func NewEnvSource(name string, bindings []EnvBinding) EnvSource {
-	return EnvSource{
-		name:     name,
+func NewEnvSource(_ string, bindings []EnvBinding) Source {
+	return envSource{
 		bindings: bindings,
 	}
 }
 
-func (source EnvSource) Name() string {
-	return source.name
+func (source envSource) Name() string {
+	return "env"
 }
 
-func (source EnvSource) Load(viperInstance *viper.Viper) error {
+func (source envSource) Apply(viperInstance *viper.Viper) error {
+	if strings.TrimSpace(source.prefix) != "" {
+		viperInstance.SetEnvPrefix(strings.ToUpper(source.prefix))
+	}
+	viperInstance.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viperInstance.AutomaticEnv()
+
+	for _, key := range viperInstance.AllKeys() {
+		if err := viperInstance.BindEnv(key); err != nil {
+			return fmt.Errorf("bind env %s: %w", key, err)
+		}
+	}
 
 	for _, binding := range source.bindings {
 		if err := viperInstance.BindEnv(binding.Key, binding.EnvName); err != nil {
-			return fmt.Errorf("bind env %s: %w", binding.EnvName, err)
+			return fmt.Errorf("bind env %s for %s: %w", binding.EnvName, binding.Key, err)
 		}
 	}
 
 	return nil
 }
 
-func mergeFromReader(viperInstance *viper.Viper, reader io.Reader) error {
-	if err := viperInstance.MergeConfig(reader); err != nil {
-		return fmt.Errorf("merge config: %w", err)
-	}
+func (source sourceError) Name() string {
+	return source.name
+}
 
-	return nil
+func (source sourceError) Apply(_ *viper.Viper) error {
+	return source.err
 }

@@ -33,7 +33,7 @@ services:
       APP_MASTER_KEY: ${APP_MASTER_KEY}
       INIT_ADMIN_USERNAME: ${INIT_ADMIN_USERNAME}
       INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD}
-      APP_COLLECTOR_INTERVAL: ${APP_COLLECTOR_INTERVAL:-60}
+      COLLECTOR_INTERVAL: ${COLLECTOR_INTERVAL:-120s}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz || exit 1"]
       interval: 300s

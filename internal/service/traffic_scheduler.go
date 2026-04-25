@@ -27,6 +27,8 @@ type TrafficScheduler struct {
 	log         zerolog.Logger
 	stopCh      chan struct{}
 	stopOnce    sync.Once
+	runCancel   context.CancelFunc
+	runCancelMu sync.Mutex
 	workersDone sync.WaitGroup
 	loopDone    sync.WaitGroup
 }
@@ -78,6 +80,10 @@ func RegisterTrafficScheduler(lifecycle fx.Lifecycle, scheduler *TrafficSchedule
 }
 
 func (scheduler *TrafficScheduler) Start(ctx context.Context) {
+	runContext, runCancel := context.WithCancel(context.Background())
+	scheduler.setRunCancel(runCancel)
+
+	// fx 的 startContext 只覆盖启动阶段，调度器要使用独立运行上下文。
 	jobs := make(chan trafficCollectJob, scheduler.cfg.MaxWorkers)
 	scheduler.log.Info().
 		Dur("interval", scheduler.cfg.Interval).
@@ -87,15 +93,16 @@ func (scheduler *TrafficScheduler) Start(ctx context.Context) {
 
 	for workerIndex := 0; workerIndex < scheduler.cfg.MaxWorkers; workerIndex++ {
 		scheduler.workersDone.Add(1)
-		go scheduler.runWorker(ctx, jobs)
+		go scheduler.runWorker(runContext, jobs)
 	}
 
 	scheduler.loopDone.Add(1)
-	go scheduler.runLoop(ctx, jobs)
+	go scheduler.runLoop(runContext, jobs)
 }
 
 func (scheduler *TrafficScheduler) Stop() {
 	scheduler.stopOnce.Do(func() {
+		scheduler.cancelRun()
 		close(scheduler.stopCh)
 	})
 }
@@ -196,5 +203,22 @@ func (scheduler *TrafficScheduler) collectWithRetry(ctx context.Context, machine
 			Uint("machine_id", machine.ID).
 			Str("host", machine.Host).
 			Msg("traffic collection exhausted retries")
+	}
+}
+
+func (scheduler *TrafficScheduler) setRunCancel(runCancel context.CancelFunc) {
+	scheduler.runCancelMu.Lock()
+	defer scheduler.runCancelMu.Unlock()
+
+	scheduler.runCancel = runCancel
+}
+
+func (scheduler *TrafficScheduler) cancelRun() {
+	scheduler.runCancelMu.Lock()
+	defer scheduler.runCancelMu.Unlock()
+
+	if scheduler.runCancel != nil {
+		scheduler.runCancel()
+		scheduler.runCancel = nil
 	}
 }

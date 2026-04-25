@@ -36,12 +36,14 @@ level = "debug"
 	require.NoError(t, os.Setenv("SESSION_SECRET", "test-session-secret"))
 	require.NoError(t, os.Setenv("APP_MASTER_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="))
 	require.NoError(t, os.Setenv("SSH_DIAL_TIMEOUT", "7s"))
+	require.NoError(t, os.Setenv("COLLECTOR_INTERVAL", "90s"))
 	t.Cleanup(func() {
 		_ = os.Unsetenv("HTTP_ADDR")
 		_ = os.Unsetenv("POSTGRES_DSN")
 		_ = os.Unsetenv("SESSION_SECRET")
 		_ = os.Unsetenv("APP_MASTER_KEY")
 		_ = os.Unsetenv("SSH_DIAL_TIMEOUT")
+		_ = os.Unsetenv("COLLECTOR_INTERVAL")
 	})
 
 	loader := NewLoader([]Source{
@@ -62,6 +64,7 @@ level = "debug"
 	require.Equal(t, "traffic-monitor", cfg.App.Name)
 	require.Equal(t, ":10080", cfg.HTTP.Addr)
 	require.Equal(t, "postgres://from-env", cfg.Database.DSN)
+	require.Equal(t, 90*time.Second, cfg.Collector.Interval)
 	require.Equal(t, 30, cfg.Database.MaxOpenConns)
 	require.Equal(t, "debug", cfg.Log.Level)
 	require.Equal(t, 10*time.Second, cfg.HTTP.ReadTimeout)

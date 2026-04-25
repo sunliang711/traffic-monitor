@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"traffic-monitor/internal/config"
@@ -35,10 +36,14 @@ type HistoryCleanupRunner interface {
 }
 
 type HistoryCleanupScheduler struct {
-	cfg    config.HistoryCleanupConfig
-	runner HistoryCleanupRunner
-	log    zerolog.Logger
-	stopCh chan struct{}
+	cfg         config.HistoryCleanupConfig
+	runner      HistoryCleanupRunner
+	log         zerolog.Logger
+	stopCh      chan struct{}
+	stopOnce    sync.Once
+	runCancel   context.CancelFunc
+	runCancelMu sync.Mutex
+	loopDone    sync.WaitGroup
 }
 
 func NewHistoryCleanupService(
@@ -83,9 +88,20 @@ func RegisterHistoryCleanupScheduler(lifecycle fx.Lifecycle, scheduler *HistoryC
 			scheduler.Start(startContext)
 			return nil
 		},
-		OnStop: func(context.Context) error {
+		OnStop: func(stopContext context.Context) error {
 			scheduler.Stop()
-			return nil
+			done := make(chan struct{})
+			go func() {
+				scheduler.Wait()
+				close(done)
+			}()
+
+			select {
+			case <-stopContext.Done():
+				return fmt.Errorf("wait history cleanup scheduler stop: %w", stopContext.Err())
+			case <-done:
+				return nil
+			}
 		},
 	})
 }
@@ -165,6 +181,10 @@ func (service *HistoryCleanupService) Cleanup(ctx context.Context, req dto.Clean
 }
 
 func (scheduler *HistoryCleanupScheduler) Start(ctx context.Context) {
+	runContext, runCancel := context.WithCancel(context.Background())
+	scheduler.setRunCancel(runCancel)
+
+	// fx 的 startContext 只覆盖启动阶段，后台清理要使用独立运行上下文。
 	scheduler.log.Info().
 		Dur("interval", scheduler.cfg.Interval).
 		Int("samples_days", scheduler.cfg.SamplesDays).
@@ -173,19 +193,24 @@ func (scheduler *HistoryCleanupScheduler) Start(ctx context.Context) {
 		Dur("timeout", scheduler.cfg.Timeout).
 		Msg("history cleanup scheduler started")
 
-	go scheduler.runLoop(ctx)
+	scheduler.loopDone.Add(1)
+	go scheduler.runLoop(runContext)
 }
 
 func (scheduler *HistoryCleanupScheduler) Stop() {
-	select {
-	case <-scheduler.stopCh:
-		return
-	default:
+	scheduler.stopOnce.Do(func() {
+		scheduler.cancelRun()
 		close(scheduler.stopCh)
-	}
+	})
+}
+
+func (scheduler *HistoryCleanupScheduler) Wait() {
+	scheduler.loopDone.Wait()
 }
 
 func (scheduler *HistoryCleanupScheduler) runLoop(ctx context.Context) {
+	defer scheduler.loopDone.Done()
+
 	ticker := time.NewTicker(scheduler.cfg.Interval)
 	defer ticker.Stop()
 
@@ -218,6 +243,23 @@ func (scheduler *HistoryCleanupScheduler) runOnce(ctx context.Context) {
 		Time("samples_cutoff", result.SamplesCutoff).
 		Time("alerts_cutoff", result.AlertsCutoff).
 		Msg("history cleanup run completed")
+}
+
+func (scheduler *HistoryCleanupScheduler) setRunCancel(runCancel context.CancelFunc) {
+	scheduler.runCancelMu.Lock()
+	defer scheduler.runCancelMu.Unlock()
+
+	scheduler.runCancel = runCancel
+}
+
+func (scheduler *HistoryCleanupScheduler) cancelRun() {
+	scheduler.runCancelMu.Lock()
+	defer scheduler.runCancelMu.Unlock()
+
+	if scheduler.runCancel != nil {
+		scheduler.runCancel()
+		scheduler.runCancel = nil
+	}
 }
 
 func (service *HistoryCleanupService) deleteExpiredSamples(ctx context.Context, machineID *uint, cutoff time.Time) (int64, error) {
