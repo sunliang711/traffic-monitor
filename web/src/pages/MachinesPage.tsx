@@ -18,6 +18,10 @@ type MachinesPageProps = {
   onDeleteMachine: (id: number) => void | Promise<void>;
 };
 
+function sshKeyName(sshKeys: SSHKey[], sshKeyID: number) {
+  return sshKeys.find((sshKey) => sshKey.id === sshKeyID)?.name ?? `SSH Key ${sshKeyID}`;
+}
+
 export default function MachinesPage(props: MachinesPageProps) {
   const {
     busy,
@@ -134,8 +138,12 @@ export default function MachinesPage(props: MachinesPageProps) {
                     {machine.host}:{machine.port}
                   </td>
                   <td>{machine.network_interface}</td>
-                  <td>{machine.ssh_key_id}</td>
-                  <td>{machine.collect_enabled ? "启用" : "停用"}</td>
+                  <td>{sshKeyName(sshKeys, machine.ssh_key_id)}</td>
+                  <td>
+                    <span className={`status-badge ${machine.collect_enabled ? "ok" : "idle"}`}>
+                      {machine.collect_enabled ? "启用" : "停用"}
+                    </span>
+                  </td>
                   <td>
                     <div className="action-row">
                       <button className="secondary-button" onClick={() => onStartEditMachine(machine)} type="button">

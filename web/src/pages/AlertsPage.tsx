@@ -1,11 +1,36 @@
 import type { AlertItem } from "../types";
 import type { MachineOption } from "../lib/app-types";
-import { formatAlertPeriod, formatTime, formatTrafficValue, machineLabel } from "../lib/app-utils";
+import {
+  formatAlertPeriod,
+  formatMetricType,
+  formatPeriodType,
+  formatTime,
+  formatTrafficValue,
+  machineDisplay,
+} from "../lib/app-utils";
 
 type AlertsPageProps = {
   alerts: AlertItem[];
   machineOptions: MachineOption[];
 };
+
+function notifyStatusBadgeClass(status: string) {
+  switch (status.toLowerCase()) {
+    case "success":
+    case "sent":
+    case "ok":
+      return "ok";
+    case "pending":
+    case "queued":
+    case "processing":
+      return "idle";
+    case "failed":
+    case "error":
+      return "error";
+    default:
+      return "idle";
+  }
+}
 
 export default function AlertsPage(props: AlertsPageProps) {
   return (
@@ -26,18 +51,31 @@ export default function AlertsPage(props: AlertsPageProps) {
             </tr>
           </thead>
           <tbody>
-            {props.alerts.map((alert) => (
-              <tr key={alert.id}>
-                <td>{machineLabel(props.machineOptions, alert.machine_id)}</td>
-                <td>{alert.period_type}</td>
-                <td>{alert.metric_type}</td>
-                <td>{formatAlertPeriod(alert.period_type, alert.bucket_time)}</td>
-                <td>{formatTrafficValue(alert.threshold_mb)}</td>
-                <td>{formatTrafficValue(alert.actual_mb)}</td>
-                <td>{alert.notify_status}</td>
-                <td>{alert.notified_at ? formatTime(alert.notified_at) : "-"}</td>
-              </tr>
-            ))}
+            {props.alerts.map((alert) => {
+              const machine = machineDisplay(props.machineOptions, alert.machine_id);
+
+              return (
+                <tr key={alert.id}>
+                  <td>
+                    <div className="machine-cell">
+                      <strong>{machine.primary}</strong>
+                      {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
+                    </div>
+                  </td>
+                  <td>{formatPeriodType(alert.period_type)}</td>
+                  <td>{formatMetricType(alert.metric_type)}</td>
+                  <td>{formatAlertPeriod(alert.period_type, alert.bucket_time)}</td>
+                  <td>{formatTrafficValue(alert.threshold_mb)}</td>
+                  <td>{formatTrafficValue(alert.actual_mb)}</td>
+                  <td>
+                    <span className={`status-badge ${notifyStatusBadgeClass(alert.notify_status)}`}>
+                      {alert.notify_status}
+                    </span>
+                  </td>
+                  <td>{alert.notified_at ? formatTime(alert.notified_at) : "-"}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

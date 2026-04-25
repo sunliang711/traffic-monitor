@@ -12,6 +12,11 @@ export type MachineLabelOption = {
   label: string;
 };
 
+export type MachineDisplay = {
+  primary: string;
+  secondary?: string;
+};
+
 export type ThresholdFormRow = {
   period_type: string;
   metric_type: string;
@@ -148,6 +153,30 @@ export function formatTrafficValue(valueMB: number) {
   return `${valueMB.toFixed(3)} MB`;
 }
 
+export function formatPeriodType(periodType: string) {
+  switch (periodType) {
+    case "hourly":
+      return "小时";
+    case "daily":
+      return "天";
+    default:
+      return periodType;
+  }
+}
+
+export function formatMetricType(metricType: string) {
+  switch (metricType) {
+    case "upload":
+      return "上行";
+    case "download":
+      return "下行";
+    case "total":
+      return "总量";
+    default:
+      return metricType;
+  }
+}
+
 export function formatAlertPeriod(periodType: string, bucketTime: string) {
   const start = new Date(bucketTime);
 
@@ -181,4 +210,18 @@ export function tabKeyFromPath(pathname: string): TabKey {
 
 export function machineLabel(machineOptions: MachineLabelOption[], machineID: number) {
   return machineOptions.find((option) => option.value === machineID)?.label ?? `机器 ${machineID}`;
+}
+
+export function machineDisplay(machineOptions: MachineLabelOption[], machineID: number): MachineDisplay {
+  const label = machineLabel(machineOptions, machineID);
+  const matched = label.match(/^(.*)\s+\((.*)\)$/);
+
+  if (!matched) {
+    return { primary: label };
+  }
+
+  return {
+    primary: matched[1],
+    secondary: matched[2],
+  };
 }

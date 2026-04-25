@@ -1,6 +1,6 @@
 import type { CollectNowResponse, TrafficSample } from "../types";
 import type { MachineOption } from "../lib/app-types";
-import { formatTime, formatTrafficValue, machineLabel } from "../lib/app-utils";
+import { formatPeriodType, formatTime, formatTrafficValue, machineDisplay } from "../lib/app-utils";
 
 type SamplesPageProps = {
   selectedMachineID: number | null;
@@ -10,7 +10,6 @@ type SamplesPageProps = {
   onSelectMachine: (machineID: number | null) => void;
   onCollectCurrentMachine: (machineID: number) => void;
 };
-
 export default function SamplesPage(props: SamplesPageProps) {
   const filteredSamples = props.samples.filter(
     (sample) => !props.selectedMachineID || sample.machine_id === props.selectedMachineID,
@@ -58,17 +57,26 @@ export default function SamplesPage(props: SamplesPageProps) {
             </tr>
           </thead>
           <tbody>
-            {filteredSamples.map((sample) => (
-              <tr key={`${sample.id}-${sample.period_type}`}>
-                <td>{machineLabel(props.machineOptions, sample.machine_id)}</td>
-                <td>{sample.period_type}</td>
-                <td>{formatTime(sample.bucket_time)}</td>
-                <td>{formatTrafficValue(sample.upload_mb)}</td>
-                <td>{formatTrafficValue(sample.download_mb)}</td>
-                <td>{formatTrafficValue(sample.total_mb)}</td>
-                <td>{formatTime(sample.collected_at)}</td>
-              </tr>
-            ))}
+            {filteredSamples.map((sample) => {
+              const machine = machineDisplay(props.machineOptions, sample.machine_id);
+
+              return (
+                <tr key={`${sample.id}-${sample.period_type}`}>
+                  <td>
+                    <div className="machine-cell">
+                      <strong>{machine.primary}</strong>
+                      {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
+                    </div>
+                  </td>
+                  <td>{formatPeriodType(sample.period_type)}</td>
+                  <td>{formatTime(sample.bucket_time)}</td>
+                  <td>{formatTrafficValue(sample.upload_mb)}</td>
+                  <td>{formatTrafficValue(sample.download_mb)}</td>
+                  <td>{formatTrafficValue(sample.total_mb)}</td>
+                  <td>{formatTime(sample.collected_at)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -76,18 +84,25 @@ export default function SamplesPage(props: SamplesPageProps) {
       {props.collectResults.length > 0 ? (
         <div className="list-block">
           <h4>最近手动采集结果</h4>
-          {props.collectResults.map((result) => (
-            <article className="card" key={`${result.machine_id}-${result.status}`}>
-              <div className="card-header">
-                <strong>{machineLabel(props.machineOptions, result.machine_id)}</strong>
-                <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
-                  {result.status}
-                </span>
-              </div>
-              <p className="card-meta">样本数：{result.sample_count}</p>
-              {result.error ? <p className="card-meta">错误：{result.error}</p> : null}
-            </article>
-          ))}
+          {props.collectResults.map((result) => {
+            const machine = machineDisplay(props.machineOptions, result.machine_id);
+
+            return (
+              <article className="card" key={`${result.machine_id}-${result.status}`}>
+                <div className="card-header">
+                  <div className="machine-cell">
+                    <strong>{machine.primary}</strong>
+                    {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
+                  </div>
+                  <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
+                    {result.status}
+                  </span>
+                </div>
+                <p className="card-meta">样本数：{result.sample_count}</p>
+                {result.error ? <p className="card-meta">错误：{result.error}</p> : null}
+              </article>
+            );
+          })}
         </div>
       ) : null}
     </section>
