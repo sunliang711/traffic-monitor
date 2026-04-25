@@ -45,16 +45,22 @@ type TrafficCollectionService struct {
 	dataProtector      SSHKeyProtector
 	sshRunner          SSHCommandRunner
 	trafficSampleStore TrafficSampleStore
+	alertEvaluator     TrafficAlertEvaluator
 	sshConfig          config.SSHConfig
 }
 
-func NewTrafficCollectionService(machineStore *repo.MachineRepo, sshKeyStore *repo.SSHKeyRepo, dataProtector SSHKeyProtector, sshRunner SSHCommandRunner, trafficSampleStore *repo.TrafficSampleRepo, sshConfig config.SSHConfig) *TrafficCollectionService {
+type TrafficAlertEvaluator interface {
+	EvaluateSamples(ctx context.Context, machineID uint, samples []model.TrafficSample) error
+}
+
+func NewTrafficCollectionService(machineStore *repo.MachineRepo, sshKeyStore *repo.SSHKeyRepo, dataProtector SSHKeyProtector, sshRunner SSHCommandRunner, trafficSampleStore *repo.TrafficSampleRepo, alertEvaluator TrafficAlertEvaluator, sshConfig config.SSHConfig) *TrafficCollectionService {
 	return &TrafficCollectionService{
 		machineStore:       machineStore,
 		sshKeyStore:        sshKeyStore,
 		dataProtector:      dataProtector,
 		sshRunner:          sshRunner,
 		trafficSampleStore: trafficSampleStore,
+		alertEvaluator:     alertEvaluator,
 		sshConfig:          sshConfig,
 	}
 }
@@ -198,6 +204,12 @@ func (service *TrafficCollectionService) collectMachineSamples(ctx context.Conte
 
 	if err := service.trafficSampleStore.UpsertSamples(ctx, samples); err != nil {
 		return nil, fmt.Errorf("persist traffic samples: %w", err)
+	}
+
+	if service.alertEvaluator != nil {
+		if err := service.alertEvaluator.EvaluateSamples(ctx, machine.ID, samples); err != nil {
+			return nil, fmt.Errorf("evaluate samples alert: %w", err)
+		}
 	}
 
 	return samples, nil
