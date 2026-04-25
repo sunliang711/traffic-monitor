@@ -124,7 +124,7 @@ pre {
   gap: 8px;
 }
 
-.tab-button,
+.tab-link,
 .primary-button,
 .secondary-button,
 .danger-button {
@@ -134,14 +134,16 @@ pre {
   transition: transform 0.16s ease, opacity 0.16s ease, background 0.16s ease;
 }
 
-.tab-button {
+.tab-link {
+  display: block;
   padding: 12px 14px;
   color: #dfe8f7;
   text-align: left;
+  text-decoration: none;
   background: rgba(11, 22, 40, 0.5);
 }
 
-.tab-button.active {
+.tab-link.active {
   background: linear-gradient(135deg, #2f6dda, #4ca8f5);
 }
 
@@ -165,14 +167,13 @@ pre {
   background: rgba(148, 40, 56, 0.92);
 }
 
-.tab-button:hover,
+.tab-link:hover,
 .primary-button:hover,
 .secondary-button:hover,
 .danger-button:hover {
   transform: translateY(-1px);
 }
 
-.tab-button:disabled,
 .primary-button:disabled,
 .secondary-button:disabled,
 .danger-button:disabled {
