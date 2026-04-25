@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { del, get, patch, post, put } from "./api";
 import type {
   AdminProfile,
@@ -81,14 +82,14 @@ type TelegramFormState = {
   chatID: string;
 };
 
-const tabs: Array<{ key: TabKey; label: string }> = [
-  { key: "overview", label: "总览" },
-  { key: "machines", label: "机器" },
-  { key: "sshKeys", label: "SSH Key" },
-  { key: "thresholds", label: "阈值" },
-  { key: "notifications", label: "通知" },
-  { key: "samples", label: "样本" },
-  { key: "alerts", label: "告警" },
+const tabs: Array<{ key: TabKey; label: string; path: string }> = [
+  { key: "overview", label: "总览", path: "/overview" },
+  { key: "machines", label: "机器", path: "/machines" },
+  { key: "sshKeys", label: "SSH Key", path: "/ssh-keys" },
+  { key: "thresholds", label: "阈值", path: "/thresholds" },
+  { key: "notifications", label: "通知", path: "/notifications" },
+  { key: "samples", label: "样本", path: "/samples" },
+  { key: "alerts", label: "告警", path: "/alerts" },
 ];
 
 const thresholdDimensions = [
@@ -120,7 +121,9 @@ const emptyThresholdRows = (): ThresholdFormRow[] =>
   }));
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeTab = tabKeyFromPath(location.pathname);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -309,6 +312,7 @@ function App() {
     try {
       await post<null>("/api/v1/auth/logout");
       setProfile(null);
+      navigate("/overview", { replace: true });
       setToast("已退出登录");
     } catch (logoutError) {
       setError(toErrorMessage(logoutError));
@@ -507,7 +511,7 @@ function App() {
       remark: machine.remark,
     });
     setMachineFormSaved(true);
-    setActiveTab("machines");
+    navigate("/machines");
   }
 
   function resetMachineForm() {
@@ -574,14 +578,9 @@ function App() {
         </div>
         <nav className="tab-list">
           {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              className={`tab-button${activeTab === tab.key ? " active" : ""}`}
-              onClick={() => setActiveTab(tab.key)}
-              type="button"
-            >
+            <Link key={tab.key} className={`tab-button${activeTab === tab.key ? " active" : ""}`} to={tab.path}>
               {tab.label}
-            </button>
+            </Link>
           ))}
         </nav>
         <button className="secondary-button" onClick={() => void handleLogout()} type="button">
@@ -620,334 +619,350 @@ function App() {
         ) : null}
         {busy ? <div className="message info">正在处理请求...</div> : null}
 
-        {activeTab === "overview" ? (
-          <OverviewTab
-            sshKeys={sshKeys}
-            machines={machines}
-            notificationChannels={notificationChannels}
-            samples={samples}
-            alerts={alerts}
-            collectResults={collectResults}
+        <Routes>
+          <Route
+            path="/"
+            element={<Navigate replace to="/overview" />}
           />
-        ) : null}
+          <Route
+            path="/overview"
+            element={
+              <OverviewTab
+                sshKeys={sshKeys}
+                machines={machines}
+                notificationChannels={notificationChannels}
+                samples={samples}
+                alerts={alerts}
+                collectResults={collectResults}
+                onNavigate={(tab) => navigate(tabPath(tab))}
+              />
+            }
+          />
+          <Route
+            path="/ssh-keys"
+            element={
+              <div className="grid two-columns">
+                <section className="panel">
+                  <h3 className="panel-title">导入已有 SSH Key</h3>
+                  <form className="form-grid" onSubmit={handleImportSSHKey}>
+                    <label className="field">
+                      <span>名称</span>
+                      <input
+                        value={sshImportForm.name}
+                        onChange={(event) => setSSHImportForm((current) => ({ ...current, name: event.target.value }))}
+                        placeholder="例如：prod-root"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>私钥</span>
+                      <textarea
+                        rows={10}
+                        value={sshImportForm.privateKey}
+                        onChange={(event) =>
+                          setSSHImportForm((current) => ({ ...current, privateKey: event.target.value }))
+                        }
+                        placeholder="粘贴 OpenSSH 私钥"
+                      />
+                    </label>
+                    <button
+                      className="primary-button"
+                      disabled={busy || !sshImportForm.name.trim() || !sshImportForm.privateKey.trim()}
+                      type="submit"
+                    >
+                      导入
+                    </button>
+                  </form>
+                </section>
 
-        {activeTab === "sshKeys" ? (
-          <div className="grid two-columns">
-            <section className="panel">
-              <h3 className="panel-title">导入已有 SSH Key</h3>
-              <form className="form-grid" onSubmit={handleImportSSHKey}>
-                <label className="field">
-                  <span>名称</span>
-                  <input
-                    value={sshImportForm.name}
-                    onChange={(event) => setSSHImportForm((current) => ({ ...current, name: event.target.value }))}
-                    placeholder="例如：prod-root"
-                  />
-                </label>
-                <label className="field">
-                  <span>私钥</span>
-                  <textarea
-                    rows={10}
-                    value={sshImportForm.privateKey}
-                    onChange={(event) =>
-                      setSSHImportForm((current) => ({ ...current, privateKey: event.target.value }))
-                    }
-                    placeholder="粘贴 OpenSSH 私钥"
-                  />
-                </label>
-                <button
-                  className="primary-button"
-                  disabled={busy || !sshImportForm.name.trim() || !sshImportForm.privateKey.trim()}
-                  type="submit"
-                >
-                  导入
-                </button>
-              </form>
-            </section>
+                <section className="panel">
+                  <h3 className="panel-title">生成新 Keypair</h3>
+                  <form className="form-grid" onSubmit={handleGenerateSSHKey}>
+                    <label className="field">
+                      <span>名称</span>
+                      <input
+                        value={sshGenerateForm.name}
+                        onChange={(event) => setSSHGenerateForm({ name: event.target.value })}
+                        placeholder="例如：ops-generated"
+                      />
+                    </label>
+                    <button className="primary-button" disabled={busy} type="submit">
+                      生成
+                    </button>
+                  </form>
 
-            <section className="panel">
-              <h3 className="panel-title">生成新 Keypair</h3>
-              <form className="form-grid" onSubmit={handleGenerateSSHKey}>
-                <label className="field">
-                  <span>名称</span>
-                  <input
-                    value={sshGenerateForm.name}
-                    onChange={(event) => setSSHGenerateForm({ name: event.target.value })}
-                    placeholder="例如：ops-generated"
-                  />
-                </label>
-                <button className="primary-button" disabled={busy} type="submit">
-                  生成
-                </button>
-              </form>
-
-              <div className="list-block">
-                <h4>SSH Key 列表</h4>
-                {sshKeys.map((sshKey) => (
-                  <article className="card" key={sshKey.id}>
-                    <div className="card-header">
-                      <strong>{sshKey.name}</strong>
-                      <button className="danger-button" onClick={() => void handleDeleteSSHKey(sshKey.id)} type="button">
-                        删除
-                      </button>
-                    </div>
-                    <p className="card-meta">
-                      类型：{sshKey.key_type} / 来源：{sshKey.source_type}
-                    </p>
-                    <p className="card-meta">指纹：{sshKey.fingerprint}</p>
-                    <pre className="code-block">{sshKey.public_key}</pre>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </div>
-        ) : null}
-
-        {activeTab === "machines" ? (
-          <div className="grid two-columns">
-            <section className="panel">
-              <div className="panel-header-inline">
-                <h3 className="panel-title">{editingMachineID ? "编辑机器" : "新增机器"}</h3>
-                {editingMachineID ? (
-                  <button className="secondary-button" onClick={resetMachineForm} type="button">
-                    取消编辑
-                  </button>
-                ) : null}
-              </div>
-              <form className="form-grid" onSubmit={handleMachineSubmit}>
-                <label className="field">
-                  <span>名称</span>
-                  <input value={machineForm.name} onChange={(event) => updateMachineForm("name", event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>主机</span>
-                  <input value={machineForm.host} onChange={(event) => updateMachineForm("host", event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>端口</span>
-                  <input value={machineForm.port} onChange={(event) => updateMachineForm("port", event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>SSH 用户</span>
-                  <input
-                    value={machineForm.sshUser}
-                    onChange={(event) => updateMachineForm("sshUser", event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>网卡</span>
-                  <input
-                    value={machineForm.networkInterface}
-                    onChange={(event) => updateMachineForm("networkInterface", event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>SSH Key</span>
-                  <select
-                    value={machineForm.sshKeyID}
-                    onChange={(event) => updateMachineForm("sshKeyID", event.target.value)}
-                  >
-                    <option value="">请选择 SSH Key</option>
+                  <div className="list-block">
+                    <h4>SSH Key 列表</h4>
                     {sshKeys.map((sshKey) => (
-                      <option key={sshKey.id} value={sshKey.id}>
-                        {sshKey.name}
-                      </option>
+                      <article className="card" key={sshKey.id}>
+                        <div className="card-header">
+                          <strong>{sshKey.name}</strong>
+                          <button className="danger-button" onClick={() => void handleDeleteSSHKey(sshKey.id)} type="button">
+                            删除
+                          </button>
+                        </div>
+                        <p className="card-meta">
+                          类型：{sshKey.key_type} / 来源：{sshKey.source_type}
+                        </p>
+                        <p className="card-meta">指纹：{sshKey.fingerprint}</p>
+                        <pre className="code-block">{sshKey.public_key}</pre>
+                      </article>
                     ))}
-                  </select>
-                </label>
-                <label className="field checkbox-field">
-                  <input
-                    checked={machineForm.collectEnabled}
-                    onChange={(event) => updateMachineForm("collectEnabled", event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span>启用采集</span>
-                </label>
-                <label className="field full-width">
-                  <span>备注</span>
-                  <textarea
-                    rows={3}
-                    value={machineForm.remark}
-                    onChange={(event) => updateMachineForm("remark", event.target.value)}
-                  />
-                </label>
-                <button className="primary-button" disabled={busy || machineFormSaved} type="submit">
-                  {editingMachineID ? "保存修改" : "创建机器"}
-                </button>
-              </form>
-            </section>
-
-            <section className="panel">
-              <h3 className="panel-title">机器列表</h3>
-              <div className="table-wrapper">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>名称</th>
-                      <th>主机</th>
-                      <th>网卡</th>
-                      <th>SSH Key</th>
-                      <th>采集</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {machines.map((machine) => (
-                      <tr key={machine.id}>
-                        <td>{machine.name}</td>
-                        <td>{machine.host}:{machine.port}</td>
-                        <td>{machine.network_interface}</td>
-                        <td>{machine.ssh_key_id}</td>
-                        <td>{machine.collect_enabled ? "启用" : "停用"}</td>
-                        <td>
-                          <div className="action-row">
-                            <button className="secondary-button" onClick={() => startEditMachine(machine)} type="button">
-                              编辑
-                            </button>
-                            <button className="secondary-button" onClick={() => void handleTestConnection(machine.id)} type="button">
-                              测试
-                            </button>
-                            <button className="danger-button" onClick={() => void handleDeleteMachine(machine.id)} type="button">
-                              删除
-                            </button>
-                          </div>
-                          {connectionResults[machine.id] ? (
-                            <p className="card-meta">
-                              测试结果：{connectionResults[machine.id].status}
-                              {connectionResults[machine.id].vnstat_version
-                                ? ` / ${connectionResults[machine.id].vnstat_version}`
-                                : ""}
-                            </p>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
-        ) : null}
+            }
+          />
+          <Route
+            path="/machines"
+            element={
+              <div className="grid two-columns">
+                <section className="panel">
+                  <div className="panel-header-inline">
+                    <h3 className="panel-title">{editingMachineID ? "编辑机器" : "新增机器"}</h3>
+                    {editingMachineID ? (
+                      <button className="secondary-button" onClick={resetMachineForm} type="button">
+                        取消编辑
+                      </button>
+                    ) : null}
+                  </div>
+                  <form className="form-grid" onSubmit={handleMachineSubmit}>
+                    <label className="field">
+                      <span>名称</span>
+                      <input value={machineForm.name} onChange={(event) => updateMachineForm("name", event.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>主机</span>
+                      <input value={machineForm.host} onChange={(event) => updateMachineForm("host", event.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>端口</span>
+                      <input value={machineForm.port} onChange={(event) => updateMachineForm("port", event.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>SSH 用户</span>
+                      <input
+                        value={machineForm.sshUser}
+                        onChange={(event) => updateMachineForm("sshUser", event.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>网卡</span>
+                      <input
+                        value={machineForm.networkInterface}
+                        onChange={(event) => updateMachineForm("networkInterface", event.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>SSH Key</span>
+                      <select
+                        value={machineForm.sshKeyID}
+                        onChange={(event) => updateMachineForm("sshKeyID", event.target.value)}
+                      >
+                        <option value="">请选择 SSH Key</option>
+                        {sshKeys.map((sshKey) => (
+                          <option key={sshKey.id} value={sshKey.id}>
+                            {sshKey.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field checkbox-field">
+                      <input
+                        checked={machineForm.collectEnabled}
+                        onChange={(event) => updateMachineForm("collectEnabled", event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>启用采集</span>
+                    </label>
+                    <label className="field full-width">
+                      <span>备注</span>
+                      <textarea
+                        rows={3}
+                        value={machineForm.remark}
+                        onChange={(event) => updateMachineForm("remark", event.target.value)}
+                      />
+                    </label>
+                    <button className="primary-button" disabled={busy || machineFormSaved} type="submit">
+                      {editingMachineID ? "保存修改" : "创建机器"}
+                    </button>
+                  </form>
+                </section>
 
-        {activeTab === "thresholds" ? (
-          <div className="grid two-columns">
-            <section className="panel">
-              <h3 className="panel-title">全局阈值</h3>
-              <form onSubmit={handleSaveGlobalThresholds}>
-                <ThresholdEditor
-                  rows={globalThresholdForm}
-                  onChange={(rows) => {
-                    setGlobalThresholdForm(rows);
-                    setGlobalThresholdsSaved(false);
-                  }}
-                />
-                <button className="primary-button" disabled={busy || globalThresholdsSaved} type="submit">
-                  保存全局阈值
-                </button>
-              </form>
-            </section>
-
-            <section className="panel">
-              <div className="panel-header-inline">
-                <h3 className="panel-title">单机覆盖阈值</h3>
-                <select
-                  value={selectedMachineID ?? ""}
-                  onChange={(event) => setSelectedMachineID(event.target.value ? Number(event.target.value) : null)}
-                >
-                  <option value="">请选择机器</option>
-                  {machineOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                <section className="panel">
+                  <h3 className="panel-title">机器列表</h3>
+                  <div className="table-wrapper">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>名称</th>
+                          <th>主机</th>
+                          <th>网卡</th>
+                          <th>SSH Key</th>
+                          <th>采集</th>
+                          <th>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {machines.map((machine) => (
+                          <tr key={machine.id}>
+                            <td>{machine.name}</td>
+                            <td>{machine.host}:{machine.port}</td>
+                            <td>{machine.network_interface}</td>
+                            <td>{machine.ssh_key_id}</td>
+                            <td>{machine.collect_enabled ? "启用" : "停用"}</td>
+                            <td>
+                              <div className="action-row">
+                                <button className="secondary-button" onClick={() => startEditMachine(machine)} type="button">
+                                  编辑
+                                </button>
+                                <button className="secondary-button" onClick={() => void handleTestConnection(machine.id)} type="button">
+                                  测试
+                                </button>
+                                <button className="danger-button" onClick={() => void handleDeleteMachine(machine.id)} type="button">
+                                  删除
+                                </button>
+                              </div>
+                              {connectionResults[machine.id] ? (
+                                <p className="card-meta">
+                                  测试结果：{connectionResults[machine.id].status}
+                                  {connectionResults[machine.id].vnstat_version
+                                    ? ` / ${connectionResults[machine.id].vnstat_version}`
+                                    : ""}
+                                </p>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
               </div>
-              {selectedMachine ? (
-                <form onSubmit={handleSaveMachineThresholds}>
-                  <ThresholdEditor
-                    rows={machineThresholdForm}
-                    onChange={(rows) => {
-                      setMachineThresholdForm(rows);
-                      setMachineThresholdsSaved(false);
-                    }}
-                  />
-                  <button className="primary-button" disabled={busy || machineThresholdsSaved} type="submit">
-                    保存 {selectedMachine.name} 的阈值
-                  </button>
-                </form>
-              ) : (
-                <p className="muted">请先选择机器。</p>
-              )}
-            </section>
-          </div>
-        ) : null}
+            }
+          />
+          <Route
+            path="/thresholds"
+            element={
+              <div className="grid two-columns">
+                <section className="panel">
+                  <h3 className="panel-title">全局阈值</h3>
+                  <form onSubmit={handleSaveGlobalThresholds}>
+                    <ThresholdEditor
+                      rows={globalThresholdForm}
+                      onChange={(rows) => {
+                        setGlobalThresholdForm(rows);
+                        setGlobalThresholdsSaved(false);
+                      }}
+                    />
+                    <button className="primary-button" disabled={busy || globalThresholdsSaved} type="submit">
+                      保存全局阈值
+                    </button>
+                  </form>
+                </section>
 
-        {activeTab === "notifications" ? (
-          <div className="grid two-columns">
-            <section className="panel">
-              <h3 className="panel-title">Webhook 通知</h3>
-              <form className="form-grid" onSubmit={handleSaveWebhook}>
-                <label className="field checkbox-field">
-                  <input
-                    checked={webhookForm.enabled}
-                    onChange={(event) => {
-                      setWebhookForm((current) => ({ ...current, enabled: event.target.checked }));
-                      setWebhookSaved(false);
-                    }}
-                    type="checkbox"
-                  />
-                  <span>启用 Webhook</span>
-                </label>
-                <label className="field">
-                  <span>请求方式</span>
-                  <select
-                    value={webhookForm.method}
-                    onChange={(event) => {
-                      setWebhookForm((current) => ({ ...current, method: event.target.value as "GET" | "POST" }));
-                      setWebhookSaved(false);
-                    }}
-                  >
-                    <option value="POST">POST</option>
-                    <option value="GET">GET</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>URL</span>
-                  <input
-                    value={webhookForm.url}
-                    onChange={(event) => {
-                      setWebhookForm((current) => ({ ...current, url: event.target.value }));
-                      setWebhookSaved(false);
-                    }}
-                    placeholder="https://example.com/hook"
-                  />
-                </label>
-                <label className="field full-width">
-                  <span>Headers(JSON 模板)</span>
-                  <textarea
-                    rows={5}
-                    value={webhookForm.headersText}
-                    onChange={(event) => {
-                      setWebhookForm((current) => ({ ...current, headersText: event.target.value }));
-                      setWebhookSaved(false);
-                    }}
-                    placeholder={`{
+                <section className="panel">
+                  <div className="panel-header-inline">
+                    <h3 className="panel-title">单机覆盖阈值</h3>
+                    <select
+                      value={selectedMachineID ?? ""}
+                      onChange={(event) => setSelectedMachineID(event.target.value ? Number(event.target.value) : null)}
+                    >
+                      <option value="">请选择机器</option>
+                      {machineOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {selectedMachine ? (
+                    <form onSubmit={handleSaveMachineThresholds}>
+                      <ThresholdEditor
+                        rows={machineThresholdForm}
+                        onChange={(rows) => {
+                          setMachineThresholdForm(rows);
+                          setMachineThresholdsSaved(false);
+                        }}
+                      />
+                      <button className="primary-button" disabled={busy || machineThresholdsSaved} type="submit">
+                        保存 {selectedMachine.name} 的阈值
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="muted">请先选择机器。</p>
+                  )}
+                </section>
+              </div>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <div className="grid two-columns">
+                <section className="panel">
+                  <h3 className="panel-title">Webhook 通知</h3>
+                  <form className="form-grid" onSubmit={handleSaveWebhook}>
+                    <label className="field checkbox-field">
+                      <input
+                        checked={webhookForm.enabled}
+                        onChange={(event) => {
+                          setWebhookForm((current) => ({ ...current, enabled: event.target.checked }));
+                          setWebhookSaved(false);
+                        }}
+                        type="checkbox"
+                      />
+                      <span>启用 Webhook</span>
+                    </label>
+                    <label className="field">
+                      <span>请求方式</span>
+                      <select
+                        value={webhookForm.method}
+                        onChange={(event) => {
+                          setWebhookForm((current) => ({ ...current, method: event.target.value as "GET" | "POST" }));
+                          setWebhookSaved(false);
+                        }}
+                      >
+                        <option value="POST">POST</option>
+                        <option value="GET">GET</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>URL</span>
+                      <input
+                        value={webhookForm.url}
+                        onChange={(event) => {
+                          setWebhookForm((current) => ({ ...current, url: event.target.value }));
+                          setWebhookSaved(false);
+                        }}
+                        placeholder="https://example.com/hook"
+                      />
+                    </label>
+                    <label className="field full-width">
+                      <span>Headers(JSON 模板)</span>
+                      <textarea
+                        rows={5}
+                        value={webhookForm.headersText}
+                        onChange={(event) => {
+                          setWebhookForm((current) => ({ ...current, headersText: event.target.value }));
+                          setWebhookSaved(false);
+                        }}
+                        placeholder={`{
   "Authorization": "Bearer {{alert_key}}",
   "X-Metric": "{{metric_type}}",
   "X-Machine-Name": "{{machine_name}}"
 }`}
-                  />
-                </label>
-                <label className="field full-width">
-                  <span>Body 模板</span>
-                  <textarea
-                    rows={8}
-                    value={webhookForm.bodyText}
-                    onChange={(event) => {
-                      setWebhookForm((current) => ({ ...current, bodyText: event.target.value }));
-                      setWebhookSaved(false);
-                    }}
-                    placeholder={`{
+                      />
+                    </label>
+                    <label className="field full-width">
+                      <span>Body 模板</span>
+                      <textarea
+                        rows={8}
+                        value={webhookForm.bodyText}
+                        onChange={(event) => {
+                          setWebhookForm((current) => ({ ...current, bodyText: event.target.value }));
+                          setWebhookSaved(false);
+                        }}
+                        placeholder={`{
   "machine_id": "{{machine_id}}",
   "machine_name": "{{machine_name}}",
   "machine_host": "{{machine_host}}",
@@ -958,219 +973,229 @@ function App() {
   "actual_mb": "{{actual_mb}}",
   "alert_key": "{{alert_key}}"
 }`}
-                  />
-                </label>
-                <div className="card">
-                  <div className="card-header">
-                    <strong>可用变量</strong>
-                  </div>
-                  <p className="card-meta">
-                    URL、Headers、Body 都支持以下变量模板：
-                    <code> {"{{machine_id}}"}</code>
-                    <code> {"{{machine_name}}"}</code>
-                    <code> {"{{machine_host}}"}</code>
-                    <code> {"{{period_type}}"}</code>
-                    <code> {"{{metric_type}}"}</code>
-                    <code> {"{{bucket_time}}"}</code>
-                    <code> {"{{threshold_mb}}"}</code>
-                    <code> {"{{actual_mb}}"}</code>
-                    <code> {"{{alert_key}}"}</code>
-                  </p>
-                </div>
-                {webhookPreview ? (
-                  <div className="card">
-                    <div className="card-header">
-                      <strong>渲染预览</strong>
+                      />
+                    </label>
+                    <div className="card">
+                      <div className="card-header">
+                        <strong>可用变量</strong>
+                      </div>
+                      <p className="card-meta">
+                        URL、Headers、Body 都支持以下变量模板：
+                        <code> {"{{machine_id}}"}</code>
+                        <code> {"{{machine_name}}"}</code>
+                        <code> {"{{machine_host}}"}</code>
+                        <code> {"{{period_type}}"}</code>
+                        <code> {"{{metric_type}}"}</code>
+                        <code> {"{{bucket_time}}"}</code>
+                        <code> {"{{threshold_mb}}"}</code>
+                        <code> {"{{actual_mb}}"}</code>
+                        <code> {"{{alert_key}}"}</code>
+                      </p>
                     </div>
-                    <p className="card-meta">URL</p>
-                    <pre className="code-block">{webhookPreview.url || "-"}</pre>
-                    <p className="card-meta">Headers</p>
-                    <pre className="code-block">{webhookPreview.headersText || "{}"}</pre>
-                    <p className="card-meta">Body</p>
-                    <pre className="code-block">{webhookPreview.bodyText || "-"}</pre>
-                  </div>
-                ) : null}
-                <div className="action-row">
-                  <button className="secondary-button" disabled={busy} onClick={() => void handleTestWebhook()} type="button">
-                    测试 Webhook
-                  </button>
-                  <button className="primary-button" disabled={busy || webhookSaved} type="submit">
-                    保存 Webhook
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            <section className="panel">
-              <h3 className="panel-title">Telegram 通知</h3>
-              <form className="form-grid" onSubmit={handleSaveTelegram}>
-                <label className="field checkbox-field">
-                  <input
-                    checked={telegramForm.enabled}
-                    onChange={(event) => {
-                      setTelegramForm((current) => ({ ...current, enabled: event.target.checked }));
-                      setTelegramSaved(false);
-                    }}
-                    type="checkbox"
-                  />
-                  <span>启用 Telegram</span>
-                </label>
-                <label className="field">
-                  <span>Bot Token</span>
-                  <input
-                    value={telegramForm.botToken}
-                    onChange={(event) => {
-                      setTelegramForm((current) => ({ ...current, botToken: event.target.value }));
-                      setTelegramSaved(false);
-                    }}
-                    placeholder="仅保存时填写"
-                  />
-                </label>
-                <label className="field">
-                  <span>Chat ID</span>
-                  <input
-                    value={telegramForm.chatID}
-                    onChange={(event) => {
-                      setTelegramForm((current) => ({ ...current, chatID: event.target.value }));
-                      setTelegramSaved(false);
-                    }}
-                  />
-                </label>
-                <button className="primary-button" disabled={busy || telegramSaved} type="submit">
-                  保存 Telegram
-                </button>
-              </form>
-
-              <div className="list-block">
-                <h4>当前渠道状态</h4>
-                {notificationChannels.map((channel) => (
-                  <article className="card" key={channel.channel_type}>
-                    <div className="card-header">
-                      <strong>{channel.channel_type}</strong>
-                      <span className={`status-badge ${channel.enabled ? "ok" : "idle"}`}>
-                        {channel.enabled ? "启用" : "停用"}
-                      </span>
+                    {webhookPreview ? (
+                      <div className="card">
+                        <div className="card-header">
+                          <strong>渲染预览</strong>
+                        </div>
+                        <p className="card-meta">URL</p>
+                        <pre className="code-block">{webhookPreview.url || "-"}</pre>
+                        <p className="card-meta">Headers</p>
+                        <pre className="code-block">{webhookPreview.headersText || "{}"}</pre>
+                        <p className="card-meta">Body</p>
+                        <pre className="code-block">{webhookPreview.bodyText || "-"}</pre>
+                      </div>
+                    ) : null}
+                    <div className="action-row">
+                      <button className="secondary-button" disabled={busy} onClick={() => void handleTestWebhook()} type="button">
+                        测试 Webhook
+                      </button>
+                      <button className="primary-button" disabled={busy || webhookSaved} type="submit">
+                        保存 Webhook
+                      </button>
                     </div>
-                    <p className="card-meta">已配置：{channel.configured ? "是" : "否"}</p>
-                    {channel.url ? <p className="card-meta">URL：{channel.url}</p> : null}
-                    {channel.chat_id ? <p className="card-meta">Chat ID：{channel.chat_id}</p> : null}
-                    {channel.token_masked ? <p className="card-meta">Token：{channel.token_masked}</p> : null}
-                  </article>
-                ))}
-              </div>
-            </section>
-          </div>
-        ) : null}
+                  </form>
+                </section>
 
-        {activeTab === "samples" ? (
-          <section className="panel">
-            <div className="panel-header-inline">
-              <h3 className="panel-title">流量样本</h3>
-              <div className="header-actions">
-                {selectedMachineID ? (
-                  <button className="secondary-button" onClick={() => void handleCollectNow(selectedMachineID)} type="button">
-                    采集当前机器
-                  </button>
-                ) : null}
-                <select
-                  value={selectedMachineID ?? ""}
-                  onChange={(event) => setSelectedMachineID(event.target.value ? Number(event.target.value) : null)}
-                >
-                  <option value="">全部机器</option>
-                  {machineOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>机器</th>
-                    <th>周期</th>
-                    <th>桶时间</th>
-                    <th>上行</th>
-                    <th>下行</th>
-                    <th>总量</th>
-                    <th>采集时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {samples
-                    .filter((sample) => !selectedMachineID || sample.machine_id === selectedMachineID)
-                    .map((sample) => (
-                      <tr key={`${sample.id}-${sample.period_type}`}>
-                        <td>{sample.machine_id}</td>
-                        <td>{sample.period_type}</td>
-                        <td>{formatTime(sample.bucket_time)}</td>
-                        <td>{formatTrafficValue(sample.upload_mb)}</td>
-                        <td>{formatTrafficValue(sample.download_mb)}</td>
-                        <td>{formatTrafficValue(sample.total_mb)}</td>
-                        <td>{formatTime(sample.collected_at)}</td>
-                      </tr>
+                <section className="panel">
+                  <h3 className="panel-title">Telegram 通知</h3>
+                  <form className="form-grid" onSubmit={handleSaveTelegram}>
+                    <label className="field checkbox-field">
+                      <input
+                        checked={telegramForm.enabled}
+                        onChange={(event) => {
+                          setTelegramForm((current) => ({ ...current, enabled: event.target.checked }));
+                          setTelegramSaved(false);
+                        }}
+                        type="checkbox"
+                      />
+                      <span>启用 Telegram</span>
+                    </label>
+                    <label className="field">
+                      <span>Bot Token</span>
+                      <input
+                        value={telegramForm.botToken}
+                        onChange={(event) => {
+                          setTelegramForm((current) => ({ ...current, botToken: event.target.value }));
+                          setTelegramSaved(false);
+                        }}
+                        placeholder="仅保存时填写"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Chat ID</span>
+                      <input
+                        value={telegramForm.chatID}
+                        onChange={(event) => {
+                          setTelegramForm((current) => ({ ...current, chatID: event.target.value }));
+                          setTelegramSaved(false);
+                        }}
+                      />
+                    </label>
+                    <button className="primary-button" disabled={busy || telegramSaved} type="submit">
+                      保存 Telegram
+                    </button>
+                  </form>
+
+                  <div className="list-block">
+                    <h4>当前渠道状态</h4>
+                    {notificationChannels.map((channel) => (
+                      <article className="card" key={channel.channel_type}>
+                        <div className="card-header">
+                          <strong>{channel.channel_type}</strong>
+                          <span className={`status-badge ${channel.enabled ? "ok" : "idle"}`}>
+                            {channel.enabled ? "启用" : "停用"}
+                          </span>
+                        </div>
+                        <p className="card-meta">已配置：{channel.configured ? "是" : "否"}</p>
+                        {channel.url ? <p className="card-meta">URL：{channel.url}</p> : null}
+                        {channel.chat_id ? <p className="card-meta">Chat ID：{channel.chat_id}</p> : null}
+                        {channel.token_masked ? <p className="card-meta">Token：{channel.token_masked}</p> : null}
+                      </article>
                     ))}
-                </tbody>
-              </table>
-            </div>
-
-            {collectResults.length > 0 ? (
-              <div className="list-block">
-                <h4>最近手动采集结果</h4>
-                {collectResults.map((result) => (
-                  <article className="card" key={`${result.machine_id}-${result.status}`}>
-                    <div className="card-header">
-                      <strong>机器 {result.machine_id}</strong>
-                      <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
-                        {result.status}
-                      </span>
-                    </div>
-                    <p className="card-meta">样本数：{result.sample_count}</p>
-                    {result.error ? <p className="card-meta">错误：{result.error}</p> : null}
-                  </article>
-                ))}
+                  </div>
+                </section>
               </div>
-            ) : null}
-          </section>
-        ) : null}
+            }
+          />
+          <Route
+            path="/samples"
+            element={
+              <section className="panel">
+                <div className="panel-header-inline">
+                  <h3 className="panel-title">流量样本</h3>
+                  <div className="header-actions">
+                    {selectedMachineID ? (
+                      <button className="secondary-button" onClick={() => void handleCollectNow(selectedMachineID)} type="button">
+                        采集当前机器
+                      </button>
+                    ) : null}
+                    <select
+                      value={selectedMachineID ?? ""}
+                      onChange={(event) => setSelectedMachineID(event.target.value ? Number(event.target.value) : null)}
+                    >
+                      <option value="">全部机器</option>
+                      {machineOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>机器</th>
+                        <th>周期</th>
+                        <th>桶时间</th>
+                        <th>上行</th>
+                        <th>下行</th>
+                        <th>总量</th>
+                        <th>采集时间</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {samples
+                        .filter((sample) => !selectedMachineID || sample.machine_id === selectedMachineID)
+                        .map((sample) => (
+                          <tr key={`${sample.id}-${sample.period_type}`}>
+                            <td>{sample.machine_id}</td>
+                            <td>{sample.period_type}</td>
+                            <td>{formatTime(sample.bucket_time)}</td>
+                            <td>{formatTrafficValue(sample.upload_mb)}</td>
+                            <td>{formatTrafficValue(sample.download_mb)}</td>
+                            <td>{formatTrafficValue(sample.total_mb)}</td>
+                            <td>{formatTime(sample.collected_at)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
 
-        {activeTab === "alerts" ? (
-          <section className="panel">
-            <h3 className="panel-title">告警记录</h3>
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>机器</th>
-                    <th>周期</th>
-                    <th>维度</th>
-                    <th>告警周期</th>
-                    <th>阈值</th>
-                    <th>实际</th>
-                    <th>通知状态</th>
-                    <th>通知时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alerts.map((alert) => (
-                    <tr key={alert.id}>
-                      <td>{alert.machine_id}</td>
-                      <td>{alert.period_type}</td>
-                      <td>{alert.metric_type}</td>
-                      <td>{formatAlertPeriod(alert.period_type, alert.bucket_time)}</td>
-                      <td>{formatTrafficValue(alert.threshold_mb)}</td>
-                      <td>{formatTrafficValue(alert.actual_mb)}</td>
-                      <td>{alert.notify_status}</td>
-                      <td>{alert.notified_at ? formatTime(alert.notified_at) : "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
+                {collectResults.length > 0 ? (
+                  <div className="list-block">
+                    <h4>最近手动采集结果</h4>
+                    {collectResults.map((result) => (
+                      <article className="card" key={`${result.machine_id}-${result.status}`}>
+                        <div className="card-header">
+                          <strong>机器 {result.machine_id}</strong>
+                          <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
+                            {result.status}
+                          </span>
+                        </div>
+                        <p className="card-meta">样本数：{result.sample_count}</p>
+                        {result.error ? <p className="card-meta">错误：{result.error}</p> : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            }
+          />
+          <Route
+            path="/alerts"
+            element={
+              <section className="panel">
+                <h3 className="panel-title">告警记录</h3>
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>机器</th>
+                        <th>周期</th>
+                        <th>维度</th>
+                        <th>告警周期</th>
+                        <th>阈值</th>
+                        <th>实际</th>
+                        <th>通知状态</th>
+                        <th>通知时间</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {alerts.map((alert) => (
+                        <tr key={alert.id}>
+                          <td>{alert.machine_id}</td>
+                          <td>{alert.period_type}</td>
+                          <td>{alert.metric_type}</td>
+                          <td>{formatAlertPeriod(alert.period_type, alert.bucket_time)}</td>
+                          <td>{formatTrafficValue(alert.threshold_mb)}</td>
+                          <td>{formatTrafficValue(alert.actual_mb)}</td>
+                          <td>{alert.notify_status}</td>
+                          <td>{alert.notified_at ? formatTime(alert.notified_at) : "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            }
+          />
+          <Route
+            path="*"
+            element={<Navigate replace to="/overview" />}
+          />
+        </Routes>
       </section>
     </main>
   );
@@ -1188,17 +1213,43 @@ function OverviewTab(props: {
   samples: TrafficSample[];
   alerts: AlertItem[];
   collectResults: CollectNowResponse["results"];
+  onNavigate: (tab: TabKey) => void;
 }) {
   const enabledMachines = props.machines.filter((machine) => machine.collect_enabled).length;
   const enabledChannels = props.notificationChannels.filter((channel) => channel.enabled).length;
 
   return (
     <div className="grid overview-grid">
-      <StatCard label="SSH Key" value={String(props.sshKeys.length)} help="当前可用的登录密钥数量" />
-      <StatCard label="机器总数" value={String(props.machines.length)} help={`启用采集 ${enabledMachines} 台`} />
-      <StatCard label="通知渠道" value={String(enabledChannels)} help="已启用的通知渠道数量" />
-      <StatCard label="最近样本" value={String(props.samples.length)} help="当前查询到的样本条数" />
-      <StatCard label="告警总数" value={String(props.alerts.length)} help="当前查询到的告警条数" />
+      <StatCard
+        label="SSH Key"
+        value={String(props.sshKeys.length)}
+        help="当前可用的登录密钥数量"
+        onClick={() => props.onNavigate("sshKeys")}
+      />
+      <StatCard
+        label="机器总数"
+        value={String(props.machines.length)}
+        help={`启用采集 ${enabledMachines} 台`}
+        onClick={() => props.onNavigate("machines")}
+      />
+      <StatCard
+        label="通知渠道"
+        value={String(enabledChannels)}
+        help="已启用的通知渠道数量"
+        onClick={() => props.onNavigate("notifications")}
+      />
+      <StatCard
+        label="最近样本"
+        value={String(props.samples.length)}
+        help="当前查询到的样本条数"
+        onClick={() => props.onNavigate("samples")}
+      />
+      <StatCard
+        label="告警总数"
+        value={String(props.alerts.length)}
+        help="当前查询到的告警条数"
+        onClick={() => props.onNavigate("alerts")}
+      />
       <StatCard
         label="最近采集执行"
         value={props.collectResults.length ? props.collectResults[0].status : "未执行"}
@@ -1208,14 +1259,24 @@ function OverviewTab(props: {
   );
 }
 
-function StatCard(props: { label: string; value: string; help: string }) {
-  return (
-    <section className="panel stat-card">
+function StatCard(props: { label: string; value: string; help: string; onClick?: () => void }) {
+  const content = (
+    <>
       <p className="muted">{props.label}</p>
       <h3>{props.value}</h3>
       <p className="card-meta">{props.help}</p>
-    </section>
+    </>
   );
+
+  if (props.onClick) {
+    return (
+      <button className="panel stat-card" onClick={props.onClick} type="button">
+        {content}
+      </button>
+    );
+  }
+
+  return <section className="panel stat-card">{content}</section>;
 }
 
 function ThresholdEditor(props: {
@@ -1403,5 +1464,15 @@ function formatAlertPeriod(periodType: string, bucketTime: string) {
 function tabTitle(activeTab: TabKey) {
   return tabs.find((tab) => tab.key === activeTab)?.label ?? "管理台";
 }
+
+function tabPath(tab: TabKey) {
+  return tabs.find((item) => item.key === tab)?.path ?? "/overview";
+}
+
+function tabKeyFromPath(pathname: string): TabKey {
+  return tabs.find((tab) => tab.path === pathname)?.key ?? "overview";
+}
+
+
 
 export default App;

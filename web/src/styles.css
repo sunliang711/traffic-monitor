@@ -213,6 +213,40 @@ pre {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.stat-card {
+  text-align: left;
+}
+
+button.stat-card .card-meta {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+button.stat-card {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+button.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(141, 168, 207, 0.28);
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.28);
+}
+
+button.stat-card:hover .card-meta {
+  text-decoration-thickness: 2px;
+}
+
+button.stat-card:focus-visible {
+  outline: 2px solid #7cc4ff;
+  outline-offset: 2px;
+}
+
 .stat-card h3 {
   margin: 8px 0;
   font-size: 32px;
