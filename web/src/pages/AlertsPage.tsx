@@ -60,7 +60,6 @@ export default function AlertsPage(props: AlertsPageProps) {
       <section className="panel section-panel">
         <div className="section-intro">
           <div>
-            <p className="section-kicker">{t("alertsTitle")}</p>
             <h3 className="panel-title">{t("alertsTitle")}</h3>
           </div>
           <p className="section-description">{t("alertsPageDescription")}</p>

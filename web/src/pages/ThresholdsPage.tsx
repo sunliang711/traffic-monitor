@@ -38,7 +38,6 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
         <div className="section-toolbar">
           <div className="section-intro">
             <div>
-              <p className="section-kicker">{t("thresholdsGlobalTitle")}</p>
               <h3 className="panel-title">{t("thresholdsGlobalTitle")}</h3>
             </div>
             <p className="section-description">{t("thresholdsGlobalDescription")}</p>

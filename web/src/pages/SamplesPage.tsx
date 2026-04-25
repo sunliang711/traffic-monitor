@@ -42,7 +42,6 @@ export default function SamplesPage(props: SamplesPageProps) {
       <section className="panel section-panel">
         <div className="section-intro">
           <div>
-            <p className="section-kicker">{t("samplesTitle")}</p>
             <h3 className="panel-title">{t("samplesTitle")}</h3>
           </div>
           <p className="section-description">{t("samplesPageDescription")}</p>
@@ -192,7 +191,6 @@ export default function SamplesPage(props: SamplesPageProps) {
       <section className="panel section-panel">
         <div className="section-intro">
           <div>
-            <p className="section-kicker">{t("samplesRecentResults")}</p>
             <h3 className="panel-title">{t("samplesRecentResults")}</h3>
           </div>
         </div>

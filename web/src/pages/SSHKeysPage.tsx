@@ -104,7 +104,6 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
         <div className="section-toolbar">
           <div className="section-intro">
             <div>
-              <p className="section-kicker">{t("sshKeysList")}</p>
               <h3 className="panel-title">{t("sshKeysList")}</h3>
             </div>
             <p className="section-description">{t("sshKeysPageDescription")}</p>
@@ -239,9 +238,6 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
           <section className="modal-panel" aria-modal="true" role="dialog">
             <div className="modal-header">
               <div>
-                <p className="section-kicker">
-                  {activeModal === "import" ? t("sshKeysImportTitle") : t("sshKeysGenerateTitle")}
-                </p>
                 <h3 className="panel-title">
                   {activeModal === "import" ? t("sshKeysImportTitle") : t("sshKeysGenerateTitle")}
                 </h3>

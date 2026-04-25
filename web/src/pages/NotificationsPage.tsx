@@ -64,7 +64,6 @@ export default function NotificationsPage(props: NotificationsPageProps) {
         <div className="section-toolbar">
           <div className="section-intro">
             <div>
-              <p className="section-kicker">{t("notificationsWebhookTitle")}</p>
               <h3 className="panel-title">{t("notificationsWebhookTitle")}</h3>
             </div>
             <p className="section-description">{t("notificationsPageDescription")}</p>
@@ -203,7 +202,6 @@ export default function NotificationsPage(props: NotificationsPageProps) {
         <div className="section-toolbar">
           <div className="section-intro">
             <div>
-              <p className="section-kicker">{t("notificationsTelegramTitle")}</p>
               <h3 className="panel-title">{t("notificationsTelegramTitle")}</h3>
             </div>
             <p className="section-description">{t("notificationsTelegramDescription")}</p>

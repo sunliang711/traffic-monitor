@@ -542,9 +542,6 @@ function App() {
         <section className="modal-panel backup-modal-panel" aria-modal="true" role="dialog">
           <div className="modal-header">
             <div>
-              <p className="section-kicker">
-                {backupModalMode === "export" ? t("backupExportAction") : t("backupImportAction")}
-              </p>
               <h3 className="panel-title">
                 {backupModalMode === "export" ? t("backupExportTitle") : t("backupImportTitle")}
               </h3>
@@ -1235,7 +1232,6 @@ function App() {
       <section className="content">
         <header className="content-hero">
           <div className="content-hero-copy">
-            <p className="eyebrow">{tabTitle(activeTab, language)}</p>
             <h2>{tabTitle(activeTab, language)}</h2>
             <p>{pageDescription}</p>
           </div>

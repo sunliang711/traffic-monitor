@@ -109,7 +109,6 @@ export default function MachinesPage(props: MachinesPageProps) {
         <div className="section-toolbar">
           <div className="section-intro">
             <div>
-              <p className="section-kicker">{t("machinesInventoryTitle")}</p>
               <h3 className="panel-title">{t("machinesList")}</h3>
             </div>
             <p className="section-description">{t("machinesInventoryDescription")}</p>
@@ -222,7 +221,6 @@ export default function MachinesPage(props: MachinesPageProps) {
           <section className="modal-panel" aria-modal="true" role="dialog">
             <div className="modal-header">
               <div>
-                <p className="section-kicker">{editingMachineID ? t("machinesEditTitle") : t("machinesCreateTitle")}</p>
                 <h3 className="panel-title">{editingMachineID ? t("machinesEditTitle") : t("machinesCreateTitle")}</h3>
               </div>
               <button className="secondary-button modal-close-button" onClick={closeMachineModal} type="button">
