@@ -24,6 +24,9 @@ cookie_name = "traffic_monitor_session"
 max_age = "24h"
 secure = false
 
+[security]
+app_master_key = ""
+
 [bootstrap]
 init_admin_username = ""
 init_admin_password = ""

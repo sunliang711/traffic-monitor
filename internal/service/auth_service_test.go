@@ -53,8 +53,8 @@ func TestAuthServiceAuthenticate(t *testing.T) {
 		adminStore: &stubAdminStore{
 			adminByUsername: map[string]*model.Admin{
 				"admin": {
-					Base: model.Base{ID: 1},
-					Username: "admin",
+					Base:         model.Base{ID: 1},
+					Username:     "admin",
 					PasswordHash: string(passwordHash),
 				},
 			},
@@ -75,8 +75,8 @@ func TestAuthServiceAuthenticate_InvalidPassword(t *testing.T) {
 		adminStore: &stubAdminStore{
 			adminByUsername: map[string]*model.Admin{
 				"admin": {
-					Base: model.Base{ID: 1},
-					Username: "admin",
+					Base:         model.Base{ID: 1},
+					Username:     "admin",
 					PasswordHash: string(passwordHash),
 				},
 			},

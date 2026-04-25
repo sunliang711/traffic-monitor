@@ -5,6 +5,10 @@ dsn = "host=127.0.0.1 user=postgres password=postgres dbname=traffic_monitor por
 # Prefer environment variable SESSION_SECRET in runtime.
 secret = "replace-with-session-secret"
 
+[security]
+# APP_MASTER_KEY must be a base64-encoded 32-byte key.
+app_master_key = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
 [bootstrap]
 # Prefer environment variables INIT_ADMIN_USERNAME and INIT_ADMIN_PASSWORD in runtime.
 init_admin_username = "admin"

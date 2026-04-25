@@ -23,9 +23,9 @@ type EmbeddedFileSource struct {
 }
 
 type FileSource struct {
-	name      string
-	filePath  string
-	optional  bool
+	name     string
+	filePath string
+	optional bool
 }
 
 type EnvBinding struct {

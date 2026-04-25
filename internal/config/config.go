@@ -11,6 +11,7 @@ type Config struct {
 	Database  DatabaseConfig  `mapstructure:"database"`
 	Log       LogConfig       `mapstructure:"log"`
 	Session   SessionConfig   `mapstructure:"session"`
+	Security  SecurityConfig  `mapstructure:"security"`
 	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
 }
 
@@ -43,6 +44,10 @@ type SessionConfig struct {
 	CookieName string        `mapstructure:"cookie_name"`
 	MaxAge     time.Duration `mapstructure:"max_age"`
 	Secure     bool          `mapstructure:"secure"`
+}
+
+type SecurityConfig struct {
+	AppMasterKey string `mapstructure:"app_master_key"`
 }
 
 type BootstrapConfig struct {
@@ -104,6 +109,10 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("session.max_age must be greater than zero")
 	}
 
+	if cfg.Security.AppMasterKey == "" {
+		return fmt.Errorf("security.app_master_key is required")
+	}
+
 	if (cfg.Bootstrap.InitAdminUsername == "") != (cfg.Bootstrap.InitAdminPassword == "") {
 		return fmt.Errorf("bootstrap init admin username and password must be configured together")
 	}
@@ -129,6 +138,10 @@ func ProvideLogConfig(cfg Config) LogConfig {
 
 func ProvideSessionConfig(cfg Config) SessionConfig {
 	return cfg.Session
+}
+
+func ProvideSecurityConfig(cfg Config) SecurityConfig {
+	return cfg.Security
 }
 
 func ProvideBootstrapConfig(cfg Config) BootstrapConfig {

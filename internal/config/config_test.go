@@ -34,10 +34,12 @@ level = "debug"
 	require.NoError(t, os.Setenv("HTTP_ADDR", ":10080"))
 	require.NoError(t, os.Setenv("POSTGRES_DSN", "postgres://from-env"))
 	require.NoError(t, os.Setenv("SESSION_SECRET", "test-session-secret"))
+	require.NoError(t, os.Setenv("APP_MASTER_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="))
 	t.Cleanup(func() {
 		_ = os.Unsetenv("HTTP_ADDR")
 		_ = os.Unsetenv("POSTGRES_DSN")
 		_ = os.Unsetenv("SESSION_SECRET")
+		_ = os.Unsetenv("APP_MASTER_KEY")
 	})
 
 	loader := NewLoader([]Source{
@@ -48,6 +50,7 @@ level = "debug"
 			{Key: "http.addr", EnvName: "HTTP_ADDR"},
 			{Key: "database.dsn", EnvName: "POSTGRES_DSN"},
 			{Key: "session.secret", EnvName: "SESSION_SECRET"},
+			{Key: "security.app_master_key", EnvName: "APP_MASTER_KEY"},
 		}),
 	})
 
@@ -60,6 +63,7 @@ level = "debug"
 	require.Equal(t, "debug", cfg.Log.Level)
 	require.Equal(t, 10*time.Second, cfg.HTTP.ReadTimeout)
 	require.Equal(t, "test-session-secret", cfg.Session.Secret)
+	require.Equal(t, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=", cfg.Security.AppMasterKey)
 }
 
 func TestLoaderLoad_ReturnsValidationErrorWhenRequiredValueMissing(t *testing.T) {

@@ -19,6 +19,7 @@ func defaultSources() []Source {
 			{Key: "session.cookie_name", EnvName: "SESSION_COOKIE_NAME"},
 			{Key: "session.secure", EnvName: "SESSION_SECURE"},
 			{Key: "session.max_age", EnvName: "SESSION_MAX_AGE"},
+			{Key: "security.app_master_key", EnvName: "APP_MASTER_KEY"},
 			{Key: "bootstrap.init_admin_username", EnvName: "INIT_ADMIN_USERNAME"},
 			{Key: "bootstrap.init_admin_password", EnvName: "INIT_ADMIN_PASSWORD"},
 		}),

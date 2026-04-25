@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"traffic-monitor/internal/model"
 
@@ -55,4 +56,8 @@ func (repo *AdminRepo) ExistsByUsername(ctx context.Context, username string) (b
 
 func IsRecordNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+func IsDuplicateKeyError(err error) bool {
+	return strings.Contains(err.Error(), "duplicate key")
 }
