@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { FormEvent } from "react";
 import ThresholdEditor from "../components/ThresholdEditor";
 import type { Machine } from "../types";
@@ -23,13 +22,15 @@ type ThresholdsPageProps = {
 
 export default function ThresholdsPage(props: ThresholdsPageProps) {
   const { t } = useI18n();
-  const [isMachineModalOpen, setMachineModalOpen] = useState(false);
+  const isMachineThresholdSelected = props.selectedMachineID !== null && props.selectedMachine !== null;
+  const activeRows = isMachineThresholdSelected ? props.machineThresholdForm : props.globalThresholdForm;
+  const activeDescription = isMachineThresholdSelected ? t("thresholdsMachineDescription") : t("thresholdsGlobalDescription");
+  const activeSaveDisabled = isMachineThresholdSelected ? props.machineThresholdsSaved : props.globalThresholdsSaved;
+  const activeSubmitHandler = isMachineThresholdSelected ? props.onSaveMachineThresholds : props.onSaveGlobalThresholds;
+  const activeChangeHandler = isMachineThresholdSelected ? props.onChangeMachineThresholdForm : props.onChangeGlobalThresholdForm;
 
   function handleSelectMachine(machineID: number | null) {
     props.onSelectMachine(machineID);
-    if (!machineID) {
-      setMachineModalOpen(false);
-    }
   }
 
   return (
@@ -38,9 +39,11 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
         <div className="section-toolbar">
           <div className="section-intro">
             <div>
-              <h3 className="panel-title">{t("thresholdsGlobalTitle")}</h3>
+              <h3 className="panel-title">
+                {isMachineThresholdSelected ? props.selectedMachine?.name : t("thresholdsGlobalTitle")}
+              </h3>
             </div>
-            <p className="section-description">{t("thresholdsGlobalDescription")}</p>
+            <p className="section-description">{activeDescription}</p>
           </div>
           <div className="action-row threshold-toolbar-actions">
             <select
@@ -48,7 +51,7 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
               value={props.selectedMachineID ?? ""}
               onChange={(event) => handleSelectMachine(event.target.value ? Number(event.target.value) : null)}
             >
-              <option value="">{t("thresholdsSelectMachine")}</option>
+              <option value="">{t("thresholdsGlobalTitle")}</option>
               {props.machineOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -56,61 +59,24 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
               ))}
             </select>
             <button
-              className="secondary-button"
-              disabled={props.busy || !props.selectedMachine}
-              onClick={() => setMachineModalOpen(true)}
-              type="button"
-            >
-              {t("thresholdsEditMachine")}
-            </button>
-            <button
               className="primary-button"
-              disabled={props.busy || props.globalThresholdsSaved}
-              form="global-threshold-form"
+              disabled={props.busy || activeSaveDisabled}
+              form="threshold-form"
               type="submit"
             >
-              {t("thresholdsSaveGlobal")}
+              {t("save")}
             </button>
           </div>
         </div>
 
-        <form id="global-threshold-form" onSubmit={props.onSaveGlobalThresholds}>
+        <form id="threshold-form" onSubmit={activeSubmitHandler}>
           <ThresholdEditor
-            rows={props.globalThresholdForm}
-            onChange={props.onChangeGlobalThresholdForm}
-            showSource={false}
+            rows={activeRows}
+            onChange={activeChangeHandler}
+            showSource={isMachineThresholdSelected}
           />
         </form>
       </section>
-
-      {isMachineModalOpen && props.selectedMachine ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-panel threshold-modal-panel" aria-modal="true" role="dialog">
-            <div className="modal-header">
-              <div>
-                <p className="section-kicker">{t("thresholdsMachineTitle")}</p>
-                <h3 className="panel-title">{props.selectedMachine.name}</h3>
-                <p className="section-description">{props.selectedMachine.host}</p>
-              </div>
-              <button className="secondary-button modal-close-button" onClick={() => setMachineModalOpen(false)} type="button">
-                {t("close")}
-              </button>
-            </div>
-
-            <form className="form-grid" onSubmit={props.onSaveMachineThresholds}>
-              <ThresholdEditor rows={props.machineThresholdForm} onChange={props.onChangeMachineThresholdForm} />
-              <div className="modal-actions">
-                <button className="secondary-button" onClick={() => setMachineModalOpen(false)} type="button">
-                  {t("cancel")}
-                </button>
-                <button className="primary-button" disabled={props.busy || props.machineThresholdsSaved} type="submit">
-                  {t("thresholdsSaveMachine", { name: props.selectedMachine.name, host: props.selectedMachine.host })}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      ) : null}
     </div>
   );
 }
