@@ -157,11 +157,11 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                       </td>
                       <td>{sshKey.key_type}</td>
                       <td>
-                        <span className="table-text-muted">{sshKey.fingerprint}</span>
+                        <span className="table-text-muted table-text-ellipsis" title={sshKey.fingerprint}>{sshKey.fingerprint}</span>
                       </td>
                       <td>
                         <div className="public-key-box">
-                          <pre className="code-block table-code-block">{sshKey.public_key}</pre>
+                          <pre className="code-block table-code-block table-code-ellipsis" title={sshKey.public_key}>{sshKey.public_key}</pre>
                           <button
                             className={`copy-public-key-button ${copiedSSHKeyID === sshKey.id ? "copied" : ""}`}
                             aria-label={copiedSSHKeyID === sshKey.id ? t("sshKeysCopied") : t("sshKeysCopyPublicKey")}

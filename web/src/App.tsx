@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { del, get, patch, post, put, withQuery } from "./api";
@@ -163,6 +163,7 @@ function App() {
     chatID: "",
   });
   const [connectionResults, setConnectionResults] = useState<Record<number, ConnectionTestResponse>>({});
+  const connectionResultTimers = useRef<Record<number, number>>({});
   const [collectResults, setCollectResults] = useState<CollectNowResponse["results"]>([]);
   const [webhookPreview, setWebhookPreview] = useState<WebhookPreviewState | null>(null);
   const [globalThresholdsSaved, setGlobalThresholdsSaved] = useState(true);
@@ -175,6 +176,10 @@ function App() {
     () => machines.map((machine) => ({ value: machine.id, label: `${machine.name} (${machine.host})` })),
     [machines],
   );
+
+  useEffect(() => () => {
+    Object.values(connectionResultTimers.current).forEach(window.clearTimeout);
+  }, []);
 
   const selectedMachine = useMemo(
     () => machines.find((machine) => machine.id === selectedThresholdMachineID) ?? null,
@@ -704,34 +709,12 @@ function App() {
               className="account-menu-item"
               onClick={() => {
                 setActionMenuOpen(false);
-                void loadProtectedData();
-              }}
-              role="menuitem"
-              type="button"
-            >
-              {t("refresh")}
-            </button>
-            <button
-              className="account-menu-item"
-              onClick={() => {
-                setActionMenuOpen(false);
                 void handleCleanupHistory();
               }}
               role="menuitem"
               type="button"
             >
               {t("cleanupHistory")}
-            </button>
-            <button
-              className="account-menu-item"
-              onClick={() => {
-                setActionMenuOpen(false);
-                void handleCollectNow();
-              }}
-              role="menuitem"
-              type="button"
-            >
-              {t("collectAllMachines")}
             </button>
             <button
               className="account-menu-item"
@@ -932,8 +915,27 @@ function App() {
   async function handleTestConnection(id: number) {
     await submitAction(async () => {
       const result = await post<ConnectionTestResponse>(`/api/v1/machines/${id}/test-connection`);
+      const previousTimer = connectionResultTimers.current[id];
+
+      if (previousTimer) {
+        window.clearTimeout(previousTimer);
+        delete connectionResultTimers.current[id];
+      }
+
       setConnectionResults((current) => ({ ...current, [id]: result }));
-      setToast(t("machineConnectionDone", { id }));
+      if (result.status.toLowerCase() === "success" || result.status.toLowerCase() === "ok") {
+        connectionResultTimers.current[id] = window.setTimeout(() => {
+          setConnectionResults((current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+          delete connectionResultTimers.current[id];
+        }, 10000);
+      }
+      setToast(result.vnstat_version.trim()
+        ? t("machineConnectionDoneWithVersion", { id, version: result.vnstat_version.trim() })
+        : t("machineConnectionDone", { id }));
     });
   }
 
@@ -1425,6 +1427,8 @@ function App() {
                 onSelectPeriodType={(periodType) => void handleSelectSamplePeriodType(periodType)}
                 onPageChange={(page) => void handleSamplesPageChange(page)}
                 onPageSizeChange={(pageSize) => void handleSamplesPageSizeChange(pageSize)}
+                onRefresh={() => void loadSamplesPage()}
+                onCollectAllMachines={() => void handleCollectNow()}
                 onCollectCurrentMachine={(machineID) => void handleCollectNow(machineID)}
               />
             }

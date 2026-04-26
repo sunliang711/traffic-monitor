@@ -1,9 +1,12 @@
+import { useEffect, useRef, useState } from "react";
 import type { CollectNowResponse, TrafficSample } from "../types";
 import type { MachineOption } from "../lib/app-types";
 import { formatPeriodType, formatStatusText, formatTime, formatTrafficValue, machineDisplay } from "../lib/app-utils";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
 import PageSizeSelect from "../components/PageSizeSelect";
+
+const autoRefreshOptions = [5, 10, 15, 30];
 
 type SamplesPageProps = {
   busy: boolean;
@@ -19,12 +22,52 @@ type SamplesPageProps = {
   onSelectPeriodType: (periodType: string) => void | Promise<void>;
   onPageChange: (page: number) => void | Promise<void>;
   onPageSizeChange: (pageSize: number) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+  onCollectAllMachines: () => void;
   onCollectCurrentMachine: (machineID: number) => void;
 };
 
+function RefreshIcon() {
+  return (
+    <svg className="refresh-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M20 6v5h-5" />
+      <path d="M4 18v-5h5" />
+      <path d="M17.7 9A6.5 6.5 0 0 0 6.2 6.8L4 9" />
+      <path d="M6.3 15A6.5 6.5 0 0 0 17.8 17.2L20 15" />
+    </svg>
+  );
+}
+
 export default function SamplesPage(props: SamplesPageProps) {
   const { language, t } = useI18n();
+  const refreshCallback = useRef(props.onRefresh);
+  const busyRef = useRef(props.busy);
+  const [isAutoRefreshMenuOpen, setAutoRefreshMenuOpen] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(30);
   const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
+
+  useEffect(() => {
+    refreshCallback.current = props.onRefresh;
+  }, [props.onRefresh]);
+
+  useEffect(() => {
+    busyRef.current = props.busy;
+  }, [props.busy]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      if (!busyRef.current) {
+        void refreshCallback.current();
+      }
+    }, autoRefreshInterval * 1000);
+
+    return () => window.clearInterval(timer);
+  }, [autoRefreshEnabled, autoRefreshInterval]);
 
   return (
     <div className="page-stack">
@@ -40,11 +83,69 @@ export default function SamplesPage(props: SamplesPageProps) {
       </section>
 
       <section className="panel section-panel">
-        <div className="section-intro">
-          <div>
-            <h3 className="panel-title">{t("samplesTitle")}</h3>
+        <div className="section-toolbar samples-section-toolbar">
+          <div className="section-intro">
+            <div>
+              <h3 className="panel-title">{t("samplesTitle")}</h3>
+            </div>
+            <p className="section-description">{t("samplesPageDescription")}</p>
           </div>
-          <p className="section-description">{t("samplesPageDescription")}</p>
+          <div className="sample-refresh-actions">
+            <button
+              className="secondary-button sample-refresh-button"
+              disabled={props.busy}
+              onClick={() => void props.onRefresh()}
+              title={t("refresh")}
+              type="button"
+              aria-label={t("refresh")}
+            >
+              <RefreshIcon />
+            </button>
+            <div className="sample-auto-refresh-wrapper">
+              <button
+                className={`secondary-button sample-auto-refresh-button${isAutoRefreshMenuOpen ? " open" : ""}`}
+                aria-expanded={isAutoRefreshMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setAutoRefreshMenuOpen((current) => !current)}
+                type="button"
+              >
+                <RefreshIcon />
+                <span>{t("samplesAutoRefresh")}</span>
+              </button>
+              {isAutoRefreshMenuOpen ? (
+                <div className="sample-auto-refresh-menu" role="menu">
+                  <button
+                    className={`sample-auto-refresh-menu-item${autoRefreshEnabled ? " active" : ""}`}
+                    onClick={() => setAutoRefreshEnabled((current) => !current)}
+                    role="menuitemcheckbox"
+                    aria-checked={autoRefreshEnabled}
+                    type="button"
+                  >
+                    <span>{t("samplesEnableAutoRefresh")}</span>
+                    {autoRefreshEnabled ? <span className="sample-auto-refresh-check" aria-hidden="true" /> : null}
+                  </button>
+                  <div className="sample-auto-refresh-divider" />
+                  {autoRefreshOptions.map((seconds) => (
+                    <button
+                      className={`sample-auto-refresh-menu-item${autoRefreshInterval === seconds ? " active" : ""}`}
+                      onClick={() => {
+                        setAutoRefreshInterval(seconds);
+                        setAutoRefreshEnabled(true);
+                        setAutoRefreshMenuOpen(false);
+                      }}
+                      role="menuitemradio"
+                      aria-checked={autoRefreshInterval === seconds}
+                      type="button"
+                      key={seconds}
+                    >
+                      <span>{t("samplesRefreshSeconds", { seconds })}</span>
+                      {autoRefreshInterval === seconds ? <span className="sample-auto-refresh-check" aria-hidden="true" /> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
         <div className="toolbar-row">
           <div className="toolbar-filters sample-toolbar-filters">
@@ -69,15 +170,26 @@ export default function SamplesPage(props: SamplesPageProps) {
               <option value="daily">{formatPeriodType("daily", language)}</option>
             </select>
           </div>
-          {props.selectedMachineID ? (
+          <div className="action-row sample-collect-actions">
             <button
               className="secondary-button"
-              onClick={() => props.onCollectCurrentMachine(props.selectedMachineID!)}
+              disabled={props.busy}
+              onClick={props.onCollectAllMachines}
               type="button"
             >
-              {t("samplesCollectCurrentMachine")}
+              {t("collectAllMachines")}
             </button>
-          ) : null}
+            {props.selectedMachineID ? (
+              <button
+                className="secondary-button"
+                disabled={props.busy}
+                onClick={() => props.onCollectCurrentMachine(props.selectedMachineID!)}
+                type="button"
+              >
+                {t("samplesCollectCurrentMachine")}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {props.samples.length === 0 ? (

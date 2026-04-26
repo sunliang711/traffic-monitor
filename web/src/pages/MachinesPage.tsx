@@ -33,9 +33,21 @@ function shortVnstatVersion(version: string) {
   return matched?.[1] ?? version;
 }
 
+const suggestedNetworkInterfaces = ["eth0", "ens18"];
+const customNetworkInterfaceValue = "custom";
+
+function networkInterfaceMode(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  return suggestedNetworkInterfaces.includes(value) ? value : customNetworkInterfaceValue;
+}
+
 export default function MachinesPage(props: MachinesPageProps) {
   const { language, t } = useI18n();
   const [isMachineModalOpen, setMachineModalOpen] = useState(false);
+  const [networkInterfaceSelectValue, setNetworkInterfaceSelectValue] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const enabledMachines = props.machines.filter((machine) => machine.collect_enabled).length;
@@ -59,6 +71,7 @@ export default function MachinesPage(props: MachinesPageProps) {
 
   useEffect(() => {
     if (editingMachineID) {
+      setNetworkInterfaceSelectValue(networkInterfaceMode(machineForm.networkInterface));
       setMachineModalOpen(true);
     }
   }, [editingMachineID]);
@@ -69,15 +82,18 @@ export default function MachinesPage(props: MachinesPageProps) {
 
   function openCreateMachineModal() {
     onResetMachineForm();
+    setNetworkInterfaceSelectValue("");
     setMachineModalOpen(true);
   }
 
   function closeMachineModal() {
     setMachineModalOpen(false);
+    setNetworkInterfaceSelectValue("");
     onResetMachineForm();
   }
 
   function startEditMachine(machine: Machine) {
+    setNetworkInterfaceSelectValue(networkInterfaceMode(machine.network_interface));
     onStartEditMachine(machine);
     setMachineModalOpen(true);
   }
@@ -90,6 +106,17 @@ export default function MachinesPage(props: MachinesPageProps) {
   function handlePageSizeChange(nextPageSize: number) {
     setPageSize(nextPageSize);
     setPage(1);
+  }
+
+  function handleNetworkInterfaceSelect(value: string) {
+    setNetworkInterfaceSelectValue(value);
+
+    if (value === customNetworkInterfaceValue) {
+      onUpdateMachineForm("networkInterface", "");
+      return;
+    }
+
+    onUpdateMachineForm("networkInterface", value);
   }
 
   return (
@@ -175,20 +202,32 @@ export default function MachinesPage(props: MachinesPageProps) {
                               </button>
                             </div>
                             {connectionResult ? (
-                              <span
-                                className={`machine-test-result ${connectionResultType}`}
-                                title={connectionResult.vnstat_version || undefined}
-                              >
-                                <span className="machine-test-dot" aria-hidden="true" />
-                                <span className="machine-test-label">
-                                  {t("machinesTestResult", {
+                              connectionResultType === "ok" ? (
+                                <span
+                                  className="machine-test-result ok machine-test-success-icon"
+                                  title={connectionResult.vnstat_version || undefined}
+                                  aria-label={t("machinesTestResult", {
                                     status: formatStatusText(connectionResult.status, language),
                                   })}
+                                >
+                                  ✓
                                 </span>
-                                {connectionResult.vnstat_version ? (
-                                  <span className="machine-test-version">{shortVnstatVersion(connectionResult.vnstat_version)}</span>
-                                ) : null}
-                              </span>
+                              ) : (
+                                <span
+                                  className={`machine-test-result ${connectionResultType}`}
+                                  title={connectionResult.vnstat_version || undefined}
+                                >
+                                  <span className="machine-test-dot" aria-hidden="true" />
+                                  <span className="machine-test-label">
+                                    {t("machinesTestResult", {
+                                      status: formatStatusText(connectionResult.status, language),
+                                    })}
+                                  </span>
+                                  {connectionResult.vnstat_version ? (
+                                    <span className="machine-test-version">{shortVnstatVersion(connectionResult.vnstat_version)}</span>
+                                  ) : null}
+                                </span>
+                              )
                             ) : null}
                           </div>
                         </td>
@@ -249,12 +288,27 @@ export default function MachinesPage(props: MachinesPageProps) {
                 <input value={machineForm.sshUser} onChange={(event) => onUpdateMachineForm("sshUser", event.target.value)} />
               </label>
 
-              <label className="field">
+              <label className="field network-interface-field">
                 <span>{t("machinesNetworkInterface")}</span>
-                <input
-                  value={machineForm.networkInterface}
-                  onChange={(event) => onUpdateMachineForm("networkInterface", event.target.value)}
-                />
+                <select
+                  value={networkInterfaceSelectValue}
+                  onChange={(event) => handleNetworkInterfaceSelect(event.target.value)}
+                >
+                  <option value="">{t("machinesNetworkInterfacePlaceholder")}</option>
+                  {suggestedNetworkInterfaces.map((networkInterface) => (
+                    <option key={networkInterface} value={networkInterface}>
+                      {networkInterface}
+                    </option>
+                  ))}
+                  <option value={customNetworkInterfaceValue}>{t("machinesNetworkInterfaceCustom")}</option>
+                </select>
+                {networkInterfaceSelectValue === customNetworkInterfaceValue ? (
+                  <input
+                    value={machineForm.networkInterface}
+                    onChange={(event) => onUpdateMachineForm("networkInterface", event.target.value)}
+                    placeholder={t("machinesNetworkInterfaceCustomPlaceholder")}
+                  />
+                ) : null}
               </label>
 
               <label className="field">

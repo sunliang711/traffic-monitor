@@ -143,5 +143,6 @@ func TestMachineServiceTestConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.SSHReachable)
 	require.True(t, resp.VNStatReady)
+	require.Equal(t, "vnStat 2.12 by Teemu Toivola", resp.VNStatVersion)
 	require.Equal(t, "ok", resp.Status)
 }
