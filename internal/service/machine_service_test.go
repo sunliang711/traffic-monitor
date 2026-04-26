@@ -86,11 +86,15 @@ type stubSSHRunner struct {
 	result  SSHExecutionResult
 	err     error
 	command *string
+	delay   time.Duration
 }
 
 func (runner stubSSHRunner) Run(_ context.Context, _ string, _ int, _ string, _ []byte, command string) (SSHExecutionResult, error) {
 	if runner.command != nil {
 		*runner.command = command
+	}
+	if runner.delay > 0 {
+		time.Sleep(runner.delay)
 	}
 
 	return runner.result, runner.err
@@ -142,7 +146,7 @@ func TestMachineServiceTestConnection(t *testing.T) {
 		dataProtector: stubDecryptor{plaintext: []byte("private-key")},
 		sshRunner: stubSSHRunner{result: SSHExecutionResult{
 			Stdout: "vnStat 2.12 by Teemu Toivola",
-		}, command: &command},
+		}, command: &command, delay: 5 * time.Millisecond},
 		sshConfig: config.SSHConfig{DialTimeout: 5 * time.Second, CommandTimeout: 5 * time.Second},
 	}
 
@@ -153,6 +157,7 @@ func TestMachineServiceTestConnection(t *testing.T) {
 	require.True(t, resp.NetworkInterfaceReady)
 	require.Equal(t, "vnStat 2.12 by Teemu Toivola", resp.VNStatVersion)
 	require.Equal(t, "ok", resp.Status)
+	require.GreaterOrEqual(t, resp.BackendElapsedMS, int64(1))
 	require.True(t, strings.Contains(command, "vnstat --json -i 'eth0'"))
 }
 

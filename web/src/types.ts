@@ -113,7 +113,8 @@ export type ConnectionTestResponse = {
   network_interface_ready: boolean;
   vnstat_version: string;
   status: string;
-  elapsed_ms?: number;
+  backend_elapsed_ms?: number;
+  frontend_elapsed_ms?: number;
 };
 
 export type WebhookTestResponse = {

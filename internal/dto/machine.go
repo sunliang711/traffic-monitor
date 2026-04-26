@@ -45,4 +45,5 @@ type MachineConnectionTestResp struct {
 	NetworkInterfaceReady bool   `json:"network_interface_ready"`
 	VNStatVersion         string `json:"vnstat_version"`
 	Status                string `json:"status"`
+	BackendElapsedMS      int64  `json:"backend_elapsed_ms"`
 }

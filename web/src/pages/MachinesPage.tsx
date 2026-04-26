@@ -46,10 +46,21 @@ function formatTestDuration(elapsedMS?: number) {
   }
 
   if (safeElapsedMS < 10000) {
-    return `${(safeElapsedMS / 1000).toFixed(1)}s`;
+    const elapsedSeconds = safeElapsedMS / 1000;
+    return safeElapsedMS % 1000 === 0 ? `${elapsedSeconds.toFixed(0)}s` : `${elapsedSeconds.toFixed(1)}s`;
   }
 
   return `${Math.round(safeElapsedMS / 1000)}s`;
+}
+
+function formatTestDurationPair(backendElapsedMS?: number, frontendElapsedMS?: number) {
+  const backendDuration = formatTestDuration(backendElapsedMS);
+  const frontendDuration = formatTestDuration(frontendElapsedMS);
+  if (!backendDuration && !frontendDuration) {
+    return "";
+  }
+
+  return `${backendDuration || "-"}/${frontendDuration || "-"}`;
 }
 
 const suggestedNetworkInterfaces = ["eth0", "ens18"];
@@ -96,7 +107,7 @@ export default function MachinesPage(props: MachinesPageProps) {
     : null;
   const testPopoverResult = testPopoverMachineID ? connectionResults[testPopoverMachineID] : undefined;
   const isTestPopoverPending = testPopoverMachineID ? Boolean(testingMachineIDs[testPopoverMachineID]) : false;
-  const testPopoverDuration = formatTestDuration(testPopoverResult?.elapsed_ms);
+  const testPopoverDuration = formatTestDurationPair(testPopoverResult?.backend_elapsed_ms, testPopoverResult?.frontend_elapsed_ms);
   const testPopoverStatusText = isTestPopoverPending
     ? t("machinesTesting")
     : testPopoverResult
@@ -167,8 +178,8 @@ export default function MachinesPage(props: MachinesPageProps) {
       }
 
       const rect = button.getBoundingClientRect();
-      const popoverWidth = Math.min(340, window.innerWidth - 32);
-      const popoverHeight = 240;
+      const popoverWidth = Math.min(420, window.innerWidth - 32);
+      const popoverHeight = 220;
       const left = Math.min(Math.max(16, rect.right - popoverWidth), window.innerWidth - popoverWidth - 16);
       let top = rect.bottom + 10;
       if (top + popoverHeight > window.innerHeight) {

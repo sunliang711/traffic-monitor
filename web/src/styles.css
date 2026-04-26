@@ -1338,9 +1338,9 @@ a {
   position: fixed;
   z-index: 45;
   display: grid;
-  gap: 14px;
-  width: min(340px, calc(100vw - 32px));
-  padding: 16px;
+  gap: 16px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px 20px;
   border: 1px solid rgba(71, 85, 105, 0.95);
   border-radius: 16px;
   background: #172234;
@@ -1348,10 +1348,12 @@ a {
 }
 
 .machine-test-popover-header {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
   align-items: start;
-  gap: 12px;
+  gap: 18px;
+  padding-right: 42px;
 }
 
 .machine-test-popover-header .card-meta {
@@ -1375,7 +1377,7 @@ a {
   justify-items: end;
   gap: 4px;
   min-width: 0;
-  max-width: 180px;
+  max-width: 220px;
 }
 
 .machine-test-popover-meta {
@@ -1390,6 +1392,9 @@ a {
 }
 
 .machine-test-popover-close {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1409,7 +1414,7 @@ a {
 .machine-test-popover-checks {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .threshold-editor table {
@@ -2091,6 +2096,20 @@ a {
   .variable-description-item {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .machine-test-popover-header {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .machine-test-popover-result {
+    justify-items: start;
+    max-width: 100%;
+  }
+
+  .machine-test-popover-meta {
+    text-align: left;
   }
 
   .content-hero-copy h2,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"traffic-monitor/internal/config"
 	"traffic-monitor/internal/dto"
@@ -152,7 +153,12 @@ func (service *MachineService) Delete(ctx context.Context, machineID uint) error
 	return nil
 }
 
-func (service *MachineService) TestConnection(ctx context.Context, machineID uint) (dto.MachineConnectionTestResp, error) {
+func (service *MachineService) TestConnection(ctx context.Context, machineID uint) (response dto.MachineConnectionTestResp, err error) {
+	startedAt := time.Now()
+	defer func() {
+		response.BackendElapsedMS = time.Since(startedAt).Milliseconds()
+	}()
+
 	machine, err := service.machineStore.GetByID(ctx, machineID)
 	if err != nil {
 		if repo.IsRecordNotFound(err) {
@@ -181,7 +187,7 @@ func (service *MachineService) TestConnection(ctx context.Context, machineID uin
 
 	result, err := service.sshRunner.Run(commandContext, machine.Host, machine.Port, machine.SSHUser, privateKeyPEM, machineVNStatCheckCommand(machine.NetworkInterface))
 	if err != nil {
-		response := dto.MachineConnectionTestResp{
+		response = dto.MachineConnectionTestResp{
 			MachineID:             machine.ID,
 			SSHReachable:          false,
 			VNStatReady:           false,
