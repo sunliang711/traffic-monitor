@@ -44,6 +44,7 @@ jobs:
           images: sunliang711/traffic-monitor
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
+            type=raw,value=latest
 
       - name: Build and push Docker image
         id: push
