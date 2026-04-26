@@ -45,16 +45,14 @@ npm run build
 仓库中提供了以下模板文件：
 
 - `config/config.toml.example`
-- `config/private.toml.example`
 
 建议初始化方式：
 
 ```bash
 cp config/config.toml.example config/config.toml
-cp config/private.toml.example config/private.toml
 ```
 
-然后按你的环境修改对应内容。
+然后按你的环境修改对应内容。如需本地私有覆盖项，可自行创建 `config/private.toml`；该文件适合存放敏感配置，不建议提交到仓库。
 
 ### 当前配置项总览
 
@@ -279,7 +277,7 @@ build:
 替换为：
 
 ```yaml
-image: sunliang711/traffic-monitor:v1.2.3
+image: sunliang711/traffic-monitor:latest
 ```
 
 然后启动：
@@ -287,8 +285,6 @@ image: sunliang711/traffic-monitor:v1.2.3
 ```bash
 docker compose up -d
 ```
-
-其中 `v1.2.3` 替换为实际发布的 tag。
 
 ### 5. 部署后验证
 
