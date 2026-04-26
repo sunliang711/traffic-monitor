@@ -37,7 +37,9 @@ type NotificationsPageProps = {
 
 export default function NotificationsPage(props: NotificationsPageProps) {
   const { t } = useI18n();
+  const [isProxyConfigOpen, setProxyConfigOpen] = useState(false);
   const [isWebhookConfigOpen, setWebhookConfigOpen] = useState(false);
+  const [isTelegramConfigOpen, setTelegramConfigOpen] = useState(false);
   const notificationVariables = [
     { token: "{{machine_id}}", description: t("notificationsVariableMachineID") },
     { token: "{{machine_name}}", description: t("notificationsVariableMachineName") },
@@ -92,134 +94,151 @@ export default function NotificationsPage(props: NotificationsPageProps) {
         ))}
       </section>
 
-      <section className="panel section-panel">
-        <div className="section-toolbar">
-          <div className="section-intro">
-            <div>
-              <h3 className="panel-title">{t("notificationsProxyTitle")}</h3>
+      <section className="panel section-panel notification-accordion-panel">
+        <button
+          className={`notification-accordion-trigger ${isProxyConfigOpen ? "open" : ""}`}
+          onClick={() => setProxyConfigOpen((current) => !current)}
+          type="button"
+          aria-expanded={isProxyConfigOpen}
+        >
+          <span className="notification-accordion-icon" aria-hidden="true" />
+          <span className="notification-accordion-title">{t("notificationsProxyTitle")}</span>
+          <span className="notification-accordion-chevron" aria-hidden="true" />
+        </button>
+        {isProxyConfigOpen ? (
+          <>
+            <div className="section-toolbar notification-channel-toolbar">
+              <div className="section-intro">
+                <p className="section-description">{t("notificationsProxyDescription")}</p>
+              </div>
+              <div className="action-row">
+                {props.notificationProxyForm.id ? (
+                  <button className="secondary-button" onClick={props.onCancelEditNotificationProxy} type="button">
+                    {t("notificationsProxyCancelEdit")}
+                  </button>
+                ) : null}
+                <button
+                  className="primary-button"
+                  disabled={props.busy || props.notificationProxySaved}
+                  form="notification-proxy-form"
+                  type="submit"
+                >
+                  {props.notificationProxyForm.id ? t("notificationsProxyUpdate") : t("notificationsProxyCreate")}
+                </button>
+              </div>
             </div>
-            <p className="section-description">{t("notificationsProxyDescription")}</p>
-          </div>
-          <div className="action-row">
-            {props.notificationProxyForm.id ? (
-              <button className="secondary-button" onClick={props.onCancelEditNotificationProxy} type="button">
-                {t("notificationsProxyCancelEdit")}
-              </button>
-            ) : null}
-            <button
-              className="primary-button"
-              disabled={props.busy || props.notificationProxySaved}
-              form="notification-proxy-form"
-              type="submit"
-            >
-              {props.notificationProxyForm.id ? t("notificationsProxyUpdate") : t("notificationsProxyCreate")}
-            </button>
-          </div>
-        </div>
-        <form id="notification-proxy-form" className="form-grid notification-proxy-form-grid" onSubmit={props.onSaveNotificationProxy}>
-          <label className="field">
-            <span>{t("notificationsProxyName")}</span>
-            <input
-              value={props.notificationProxyForm.name}
-              onChange={(event) => {
-                props.onNotificationProxyFormChange((current) => ({ ...current, name: event.target.value }));
-              }}
-              placeholder={t("notificationsProxyNamePlaceholder")}
-            />
-          </label>
-          <label className="field">
-            <span>{t("notificationsProxyType")}</span>
-            <select
-              value={props.notificationProxyForm.proxyType}
-              onChange={(event) => {
-                props.onNotificationProxyFormChange((current) => ({
-                  ...current,
-                  proxyType: event.target.value as "http" | "socks",
-                }));
-              }}
-            >
-              <option value="http">HTTP</option>
-              <option value="socks">SOCKS</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>{t("notificationsProxyURL")}</span>
-            <input
-              value={props.notificationProxyForm.url}
-              onChange={(event) => {
-                props.onNotificationProxyFormChange((current) => ({ ...current, url: event.target.value }));
-              }}
-              placeholder={props.notificationProxyForm.proxyType === "socks" ? "socks5://127.0.0.1:1080" : "http://127.0.0.1:7890"}
-            />
-          </label>
-        </form>
-        <div className="table-wrapper notification-proxy-table-wrapper">
-          <table className="notification-proxy-table">
-            <thead>
-              <tr>
-                <th>{t("notificationsProxyName")}</th>
-                <th>{t("notificationsProxyType")}</th>
-                <th>{t("notificationsProxyURL")}</th>
-                <th>{t("notificationsProxyActions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {props.notificationProxies.length > 0 ? (
-                props.notificationProxies.map((notificationProxy) => (
-                  <tr key={notificationProxy.id}>
-                    <td>{notificationProxy.name}</td>
-                    <td>{notificationProxy.proxy_type.toUpperCase()}</td>
-                    <td className="table-text-muted">{notificationProxy.url}</td>
-                    <td>
-                      <div className="action-row">
-                        <button className="secondary-button" onClick={() => props.onEditNotificationProxy(notificationProxy)} type="button">
-                          {t("notificationsProxyEdit")}
-                        </button>
-                        <button className="danger-button" onClick={() => props.onDeleteNotificationProxy(notificationProxy.id)} type="button">
-                          {t("notificationsProxyDelete")}
-                        </button>
-                      </div>
-                    </td>
+            <form id="notification-proxy-form" className="form-grid notification-proxy-form-grid" onSubmit={props.onSaveNotificationProxy}>
+              <label className="field">
+                <span>{t("notificationsProxyName")}</span>
+                <input
+                  value={props.notificationProxyForm.name}
+                  onChange={(event) => {
+                    props.onNotificationProxyFormChange((current) => ({ ...current, name: event.target.value }));
+                  }}
+                  placeholder={t("notificationsProxyNamePlaceholder")}
+                />
+              </label>
+              <label className="field">
+                <span>{t("notificationsProxyType")}</span>
+                <select
+                  value={props.notificationProxyForm.proxyType}
+                  onChange={(event) => {
+                    props.onNotificationProxyFormChange((current) => ({
+                      ...current,
+                      proxyType: event.target.value as "http" | "socks",
+                    }));
+                  }}
+                >
+                  <option value="http">HTTP</option>
+                  <option value="socks">SOCKS</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>{t("notificationsProxyURL")}</span>
+                <input
+                  value={props.notificationProxyForm.url}
+                  onChange={(event) => {
+                    props.onNotificationProxyFormChange((current) => ({ ...current, url: event.target.value }));
+                  }}
+                  placeholder={props.notificationProxyForm.proxyType === "socks" ? "socks5://127.0.0.1:1080" : "http://127.0.0.1:7890"}
+                />
+              </label>
+            </form>
+            <div className="table-wrapper notification-proxy-table-wrapper">
+              <table className="notification-proxy-table">
+                <thead>
+                  <tr>
+                    <th>{t("notificationsProxyName")}</th>
+                    <th>{t("notificationsProxyType")}</th>
+                    <th>{t("notificationsProxyURL")}</th>
+                    <th>{t("notificationsProxyActions")}</th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td className="table-text-muted" colSpan={4}>
-                    {t("notificationsProxyEmpty")}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {props.notificationProxies.length > 0 ? (
+                    props.notificationProxies.map((notificationProxy) => (
+                      <tr key={notificationProxy.id}>
+                        <td>{notificationProxy.name}</td>
+                        <td>{notificationProxy.proxy_type.toUpperCase()}</td>
+                        <td className="table-text-muted">{notificationProxy.url}</td>
+                        <td>
+                          <div className="action-row">
+                            <button className="secondary-button" onClick={() => props.onEditNotificationProxy(notificationProxy)} type="button">
+                              {t("notificationsProxyEdit")}
+                            </button>
+                            <button className="danger-button" onClick={() => props.onDeleteNotificationProxy(notificationProxy.id)} type="button">
+                              {t("notificationsProxyDelete")}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="table-text-muted" colSpan={4}>
+                        {t("notificationsProxyEmpty")}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
       </section>
 
-      <section className="panel section-panel">
-        <div className="section-toolbar">
-          <div className="section-intro">
-            <div>
-              <h3 className="panel-title">{t("notificationsWebhookTitle")}</h3>
+      <section className="panel section-panel notification-accordion-panel">
+        <button
+          className={`notification-accordion-trigger ${isWebhookConfigOpen ? "open" : ""}`}
+          onClick={() => setWebhookConfigOpen((current) => !current)}
+          type="button"
+          aria-expanded={isWebhookConfigOpen}
+        >
+          <span className="notification-accordion-icon" aria-hidden="true" />
+          <span className="notification-accordion-title">{t("notificationsWebhookTitle")}</span>
+          <span className="notification-accordion-chevron" aria-hidden="true" />
+        </button>
+        {isWebhookConfigOpen ? (
+          <>
+            <div className="section-toolbar notification-channel-toolbar">
+              <div className="section-intro">
+                <p className="section-description">{t("notificationsPageDescription")}</p>
+              </div>
+              <div className="action-row">
+                <button className="secondary-button" disabled={props.busy} onClick={props.onTestWebhook} type="button">
+                  {t("notificationsTestWebhook")}
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={props.busy || props.webhookSaved}
+                  form="webhook-form"
+                  type="submit"
+                >
+                  {t("notificationsSaveWebhook")}
+                </button>
+              </div>
             </div>
-            <p className="section-description">{t("notificationsPageDescription")}</p>
-          </div>
-          <div className="action-row">
-            <button className="secondary-button" onClick={() => setWebhookConfigOpen((current) => !current)} type="button">
-              {isWebhookConfigOpen ? t("notificationsCollapseConfig") : t("notificationsExpandConfig")}
-            </button>
-            <button className="secondary-button" disabled={props.busy} onClick={props.onTestWebhook} type="button">
-              {t("notificationsTestWebhook")}
-            </button>
-            <button
-              className="primary-button"
-              disabled={props.busy || props.webhookSaved}
-              form="webhook-form"
-              type="submit"
-            >
-              {t("notificationsSaveWebhook")}
-            </button>
-          </div>
-        </div>
-        <form id="webhook-form" className="form-grid webhook-form-grid" onSubmit={props.onSaveWebhook}>
+            <form id="webhook-form" className="form-grid webhook-form-grid" onSubmit={props.onSaveWebhook}>
           <label className="field checkbox-field full-width">
             <input
               checked={props.webhookForm.enabled}
@@ -231,8 +250,6 @@ export default function NotificationsPage(props: NotificationsPageProps) {
             <span>{t("notificationsEnableWebhook")}</span>
           </label>
 
-          {isWebhookConfigOpen ? (
-            <>
               <label className="field">
                 <span>{t("notificationsMethod")}</span>
                 <select
@@ -343,40 +360,43 @@ export default function NotificationsPage(props: NotificationsPageProps) {
                   <pre className="code-block">{props.webhookPreview.bodyText || "-"}</pre>
                 </div>
               ) : null}
-            </>
-          ) : (
-            <div className="card webhook-collapsed-note full-width">
-              <p className="card-meta">{t("notificationsWebhookCollapsed")}</p>
-              {props.webhookForm.url ? <p className="card-meta">{t("notificationsURL", { url: props.webhookForm.url })}</p> : null}
-              <p className="card-meta">{t("notificationsProxy", { value: notificationProxyLabel(Number(props.webhookForm.proxyID) || undefined) })}</p>
-            </div>
-          )}
-        </form>
+            </form>
+          </>
+        ) : null}
       </section>
 
-      <section className="panel section-panel telegram-panel">
-        <div className="section-toolbar">
-          <div className="section-intro">
-            <div>
-              <h3 className="panel-title">{t("notificationsTelegramTitle")}</h3>
+      <section className="panel section-panel telegram-panel notification-accordion-panel">
+        <button
+          className={`notification-accordion-trigger ${isTelegramConfigOpen ? "open" : ""}`}
+          onClick={() => setTelegramConfigOpen((current) => !current)}
+          type="button"
+          aria-expanded={isTelegramConfigOpen}
+        >
+          <span className="notification-accordion-icon" aria-hidden="true" />
+          <span className="notification-accordion-title">{t("notificationsTelegramTitle")}</span>
+          <span className="notification-accordion-chevron" aria-hidden="true" />
+        </button>
+        {isTelegramConfigOpen ? (
+          <>
+            <div className="section-toolbar notification-channel-toolbar">
+              <div className="section-intro">
+                <p className="section-description">{t("notificationsTelegramDescription")}</p>
+              </div>
+              <div className="action-row">
+                <button className="secondary-button" disabled={props.busy} onClick={props.onTestTelegram} type="button">
+                  {t("notificationsTestTelegram")}
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={props.busy || props.telegramSaved}
+                  form="telegram-form"
+                  type="submit"
+                >
+                  {t("notificationsSaveTelegram")}
+                </button>
+              </div>
             </div>
-            <p className="section-description">{t("notificationsTelegramDescription")}</p>
-          </div>
-          <div className="action-row">
-            <button className="secondary-button" disabled={props.busy} onClick={props.onTestTelegram} type="button">
-              {t("notificationsTestTelegram")}
-            </button>
-            <button
-              className="primary-button"
-              disabled={props.busy || props.telegramSaved}
-              form="telegram-form"
-              type="submit"
-            >
-              {t("notificationsSaveTelegram")}
-            </button>
-          </div>
-        </div>
-        <form id="telegram-form" className="form-grid telegram-form-grid" onSubmit={props.onSaveTelegram}>
+            <form id="telegram-form" className="form-grid telegram-form-grid" onSubmit={props.onSaveTelegram}>
           <label className="field checkbox-field full-width">
             <input
               checked={props.telegramForm.enabled}
@@ -470,7 +490,9 @@ export default function NotificationsPage(props: NotificationsPageProps) {
               <p className="card-meta">{t("notificationsProxy", { value: notificationProxyLabel(Number(props.telegramForm.proxyID) || undefined) })}</p>
             </div>
           )}
-        </form>
+            </form>
+          </>
+        ) : null}
       </section>
     </div>
   );

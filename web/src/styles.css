@@ -1585,6 +1585,89 @@ a {
   word-break: break-word;
 }
 
+.notification-accordion-panel {
+  gap: 18px;
+}
+
+.notification-accordion-trigger {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  padding: 20px 24px;
+  color: var(--heading);
+  text-align: left;
+  background: #1a2638;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.notification-accordion-trigger.open,
+.notification-accordion-trigger:focus-visible {
+  border-color: rgba(248, 250, 252, 0.92);
+  box-shadow: 0 0 0 3px rgba(248, 250, 252, 0.08);
+}
+
+.notification-accordion-trigger:hover {
+  background: #202d41;
+}
+
+.notification-accordion-icon {
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+
+.notification-accordion-icon::before,
+.notification-accordion-icon::after {
+  position: absolute;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  content: "";
+  border: 2px solid currentColor;
+  transform: rotate(45deg) scaleY(0.58);
+}
+
+.notification-accordion-icon::before {
+  top: 5px;
+}
+
+.notification-accordion-icon::after {
+  top: 11px;
+}
+
+.notification-accordion-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--heading);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-accordion-chevron {
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.18s ease;
+}
+
+.notification-accordion-trigger.open .notification-accordion-chevron {
+  transform: translateY(4px) rotate(225deg);
+}
+
+.notification-channel-toolbar {
+  padding: 0 4px;
+}
+
 .notification-proxy-form-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: end;
@@ -2096,6 +2179,28 @@ a {
   .variable-description-item {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .notification-accordion-trigger {
+    gap: 14px;
+    padding: 16px 18px;
+    border-radius: 20px;
+  }
+
+  .notification-accordion-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .notification-accordion-icon::before,
+  .notification-accordion-icon::after {
+    left: 5px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .notification-accordion-title {
+    font-size: 19px;
   }
 
   .machine-test-popover-header {
