@@ -39,9 +39,10 @@ type MachineResp struct {
 }
 
 type MachineConnectionTestResp struct {
-	MachineID     uint   `json:"machine_id"`
-	SSHReachable  bool   `json:"ssh_reachable"`
-	VNStatReady   bool   `json:"vnstat_ready"`
-	VNStatVersion string `json:"vnstat_version"`
-	Status        string `json:"status"`
+	MachineID             uint   `json:"machine_id"`
+	SSHReachable          bool   `json:"ssh_reachable"`
+	VNStatReady           bool   `json:"vnstat_ready"`
+	NetworkInterfaceReady bool   `json:"network_interface_ready"`
+	VNStatVersion         string `json:"vnstat_version"`
+	Status                string `json:"status"`
 }

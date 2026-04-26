@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { del, get, patch, post, put, withQuery } from "./api";
@@ -163,7 +163,7 @@ function App() {
     chatID: "",
   });
   const [connectionResults, setConnectionResults] = useState<Record<number, ConnectionTestResponse>>({});
-  const connectionResultTimers = useRef<Record<number, number>>({});
+  const [testingMachineIDs, setTestingMachineIDs] = useState<Record<number, boolean>>({});
   const [collectResults, setCollectResults] = useState<CollectNowResponse["results"]>([]);
   const [webhookPreview, setWebhookPreview] = useState<WebhookPreviewState | null>(null);
   const [globalThresholdsSaved, setGlobalThresholdsSaved] = useState(true);
@@ -176,10 +176,6 @@ function App() {
     () => machines.map((machine) => ({ value: machine.id, label: `${machine.name} (${machine.host})` })),
     [machines],
   );
-
-  useEffect(() => () => {
-    Object.values(connectionResultTimers.current).forEach(window.clearTimeout);
-  }, []);
 
   const selectedMachine = useMemo(
     () => machines.find((machine) => machine.id === selectedThresholdMachineID) ?? null,
@@ -552,7 +548,7 @@ function App() {
               </h3>
             </div>
             <button className="secondary-button modal-close-button" onClick={closeBackupModal} type="button">
-              {t("cancel")}
+              {t("close")}
             </button>
           </div>
 
@@ -913,30 +909,31 @@ function App() {
   }
 
   async function handleTestConnection(id: number) {
-    await submitAction(async () => {
+    setTestingMachineIDs((current) => ({ ...current, [id]: true }));
+    setError("");
+    setToast("");
+    try {
       const result = await post<ConnectionTestResponse>(`/api/v1/machines/${id}/test-connection`);
-      const previousTimer = connectionResultTimers.current[id];
-
-      if (previousTimer) {
-        window.clearTimeout(previousTimer);
-        delete connectionResultTimers.current[id];
-      }
-
       setConnectionResults((current) => ({ ...current, [id]: result }));
-      if (result.status.toLowerCase() === "success" || result.status.toLowerCase() === "ok") {
-        connectionResultTimers.current[id] = window.setTimeout(() => {
-          setConnectionResults((current) => {
-            const next = { ...current };
-            delete next[id];
-            return next;
-          });
-          delete connectionResultTimers.current[id];
-        }, 10000);
-      }
-      setToast(result.vnstat_version.trim()
-        ? t("machineConnectionDoneWithVersion", { id, version: result.vnstat_version.trim() })
-        : t("machineConnectionDone", { id }));
-    });
+    } catch {
+      setConnectionResults((current) => ({
+        ...current,
+        [id]: {
+          machine_id: id,
+          ssh_reachable: false,
+          vnstat_ready: false,
+          network_interface_ready: false,
+          vnstat_version: "",
+          status: "error",
+        },
+      }));
+    } finally {
+      setTestingMachineIDs((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    }
   }
 
   async function handleSaveGlobalThresholds(event: FormEvent<HTMLFormElement>) {
@@ -1356,6 +1353,7 @@ function App() {
                 sshKeys={sshKeys}
                 machines={machines}
                 connectionResults={connectionResults}
+                testingMachineIDs={testingMachineIDs}
                 onMachineSubmit={handleMachineSubmit}
                 onResetMachineForm={resetMachineForm}
                 onUpdateMachineForm={updateMachineForm}

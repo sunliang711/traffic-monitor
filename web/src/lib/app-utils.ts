@@ -311,6 +311,14 @@ export function formatStatusText(status: string, language: Language) {
       return translate(language, "statusFailed");
     case "error":
       return translate(language, "statusError");
+    case "ssh_failed":
+      return translate(language, "statusSSHFailed");
+    case "vnstat_not_installed":
+      return translate(language, "statusVNStatNotInstalled");
+    case "vnstat_interface_missing":
+      return translate(language, "statusVNStatInterfaceMissing");
+    case "vnstat_unavailable":
+      return translate(language, "statusVNStatUnavailable");
     default:
       return status;
   }

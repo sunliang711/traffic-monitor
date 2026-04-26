@@ -1230,38 +1230,38 @@ a {
 }
 
 .machine-table {
-  min-width: 1060px;
+  min-width: 1320px;
   table-layout: fixed;
 }
 
 .machine-table th:nth-child(1),
 .machine-table td:nth-child(1) {
-  width: 14%;
+  width: 11%;
 }
 
 .machine-table th:nth-child(2),
 .machine-table td:nth-child(2) {
-  width: 22%;
+  width: 18%;
 }
 
 .machine-table th:nth-child(3),
 .machine-table td:nth-child(3) {
-  width: 11%;
+  width: 9%;
 }
 
 .machine-table th:nth-child(4),
 .machine-table td:nth-child(4) {
-  width: 13%;
+  width: 10%;
 }
 
 .machine-table th:nth-child(5),
 .machine-table td:nth-child(5) {
-  width: 13%;
+  width: 10%;
 }
 
 .machine-table th:nth-child(6),
 .machine-table td:nth-child(6) {
-  width: 27%;
+  width: 42%;
 }
 
 .machine-table td {
@@ -1273,9 +1273,9 @@ a {
 }
 
 .machine-actions-stack {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
   min-width: 0;
 }
 
@@ -1283,68 +1283,63 @@ a {
   flex: 0 0 auto;
 }
 
-.machine-test-result {
+.machine-test-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  width: 100%;
+  max-width: 520px;
+  min-height: 28px;
+}
+
+.machine-test-summary.pending {
+  color: #fcd34d;
+}
+
+.machine-test-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.machine-test-check {
   display: inline-flex;
   align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 230px;
-  min-height: 32px;
-  padding: 6px 10px;
-  overflow: hidden;
-  gap: 7px;
+  gap: 6px;
+  min-height: 26px;
+  padding: 4px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.1;
   white-space: nowrap;
 }
 
-.machine-test-result.ok {
+.machine-test-check.ok {
   color: #8ee8dc;
-  background: rgba(20, 184, 166, 0.11);
-  border: 1px solid rgba(20, 184, 166, 0.26);
+  background: rgba(20, 184, 166, 0.12);
+  border: 1px solid rgba(20, 184, 166, 0.28);
 }
 
-.machine-test-success-icon {
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  max-width: none;
-  padding: 0;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.machine-test-result.error {
+.machine-test-check.error {
   color: #fda4af;
   background: rgba(244, 63, 94, 0.11);
-  border: 1px solid rgba(244, 63, 94, 0.26);
+  border: 1px solid rgba(244, 63, 94, 0.28);
 }
 
-.machine-test-dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.machine-test-label,
-.machine-test-version {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.machine-test-label {
-  flex: 0 1 auto;
-  min-width: 0;
+.machine-test-pending {
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .machine-test-version {
   min-width: 0;
   color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .threshold-editor table {

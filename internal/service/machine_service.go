@@ -13,11 +13,16 @@ import (
 )
 
 var (
-	ErrMachineNotFound       = errors.New("machine not found")
-	ErrSSHKeyNotFound        = errors.New("ssh key not found")
-	ErrInvalidMachineConfig  = errors.New("invalid machine config")
-	ErrVNStatUnavailable     = errors.New("vnstat unavailable")
-	ErrSSHKeyDecryptFailed   = errors.New("ssh key decrypt failed")
+	ErrMachineNotFound      = errors.New("machine not found")
+	ErrSSHKeyNotFound       = errors.New("ssh key not found")
+	ErrInvalidMachineConfig = errors.New("invalid machine config")
+	ErrVNStatUnavailable    = errors.New("vnstat unavailable")
+	ErrSSHKeyDecryptFailed  = errors.New("ssh key decrypt failed")
+)
+
+const (
+	vnstatNotInstalledMarker     = "__TRAFFIC_MONITOR_VNSTAT_NOT_INSTALLED__"
+	vnstatInterfaceMissingMarker = "__TRAFFIC_MONITOR_VNSTAT_INTERFACE_MISSING__"
 )
 
 type MachineStore interface {
@@ -174,42 +179,39 @@ func (service *MachineService) TestConnection(ctx context.Context, machineID uin
 	commandContext, cancel := context.WithTimeout(ctx, service.sshConfig.CommandTimeout)
 	defer cancel()
 
-	result, err := service.sshRunner.Run(commandContext, machine.Host, machine.Port, machine.SSHUser, privateKeyPEM, machineVNStatCheckCommand())
+	result, err := service.sshRunner.Run(commandContext, machine.Host, machine.Port, machine.SSHUser, privateKeyPEM, machineVNStatCheckCommand(machine.NetworkInterface))
 	if err != nil {
 		response := dto.MachineConnectionTestResp{
-			MachineID:     machine.ID,
-			SSHReachable:  false,
-			VNStatReady:   false,
-			VNStatVersion: "",
-			Status:        "ssh_failed",
+			MachineID:             machine.ID,
+			SSHReachable:          false,
+			VNStatReady:           false,
+			NetworkInterfaceReady: false,
+			VNStatVersion:         "",
+			Status:                "ssh_failed",
 		}
 
 		if strings.TrimSpace(result.Stdout) != "" {
 			response.SSHReachable = true
 		}
 
-		if strings.Contains(strings.ToLower(result.Stdout), "vnstat") {
-			response.VNStatReady = true
-			response.Status = "ok"
-			response.VNStatVersion = strings.TrimSpace(result.Stdout)
+		if strings.Contains(err.Error(), "run ssh command") {
+			response.SSHReachable = true
+			response.Status = vnstatFailureStatus(result.Stdout)
+			response.VNStatVersion = vnstatVersionFromFailureOutput(result.Stdout)
+			response.VNStatReady = response.Status != "vnstat_not_installed"
 			return response, nil
 		}
 
-		if strings.Contains(err.Error(), "run ssh command") {
-			response.SSHReachable = true
-			response.Status = "vnstat_unavailable"
-			return response, ErrVNStatUnavailable
-		}
-
-		return response, err
+		return response, nil
 	}
 
 	return dto.MachineConnectionTestResp{
-		MachineID:     machine.ID,
-		SSHReachable:  true,
-		VNStatReady:   true,
-		VNStatVersion: strings.TrimSpace(result.Stdout),
-		Status:        "ok",
+		MachineID:             machine.ID,
+		SSHReachable:          true,
+		VNStatReady:           true,
+		NetworkInterfaceReady: true,
+		VNStatVersion:         strings.TrimSpace(result.Stdout),
+		Status:                "ok",
 	}, nil
 }
 
@@ -287,6 +289,31 @@ func toMachineResp(machine *model.Machine) dto.MachineResp {
 	}
 }
 
-func machineVNStatCheckCommand() string {
-	return "command -v vnstat >/dev/null 2>&1 && vnstat --version"
+func machineVNStatCheckCommand(networkInterface string) string {
+	return fmt.Sprintf("if ! command -v vnstat >/dev/null 2>&1; then echo %s; exit 127; fi; version=$(vnstat --version); if ! vnstat --json -i %s >/dev/null 2>&1; then echo %s; printf '%%s\\n' \"$version\"; exit 2; fi; printf '%%s\\n' \"$version\"", shellEscapeArg(vnstatNotInstalledMarker), shellEscapeArg(networkInterface), shellEscapeArg(vnstatInterfaceMissingMarker))
+}
+
+func vnstatFailureStatus(output string) string {
+	switch {
+	case strings.Contains(output, vnstatNotInstalledMarker):
+		return "vnstat_not_installed"
+	case strings.Contains(output, vnstatInterfaceMissingMarker):
+		return "vnstat_interface_missing"
+	default:
+		return "vnstat_unavailable"
+	}
+}
+
+func vnstatVersionFromFailureOutput(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "__TRAFFIC_MONITOR_") {
+			continue
+		}
+
+		return line
+	}
+
+	return ""
 }

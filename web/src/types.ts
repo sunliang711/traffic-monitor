@@ -99,6 +99,7 @@ export type ConnectionTestResponse = {
   machine_id: number;
   ssh_reachable: boolean;
   vnstat_ready: boolean;
+  network_interface_ready: boolean;
   vnstat_version: string;
   status: string;
 };

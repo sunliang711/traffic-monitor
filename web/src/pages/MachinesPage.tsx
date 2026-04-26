@@ -15,6 +15,7 @@ type MachinesPageProps = {
   sshKeys: SSHKey[];
   machines: Machine[];
   connectionResults: Record<number, ConnectionTestResponse>;
+  testingMachineIDs: Record<number, boolean>;
   onMachineSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onResetMachineForm: () => void;
   onUpdateMachineForm: <Key extends keyof MachineFormState>(key: Key, value: MachineFormState[Key]) => void;
@@ -59,6 +60,7 @@ export default function MachinesPage(props: MachinesPageProps) {
     sshKeys,
     machines,
     connectionResults,
+    testingMachineIDs,
     onMachineSubmit,
     onResetMachineForm,
     onUpdateMachineForm,
@@ -166,14 +168,13 @@ export default function MachinesPage(props: MachinesPageProps) {
                     <th>{t("machinesNetworkInterface")}</th>
                     <th>SSH Key</th>
                     <th>{t("machinesCollectEnabled")}</th>
-                    <th>{t("machinesActions")}</th>
+                    <th>{t("machinesActionsAndResult")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleMachines.map((machine) => {
                     const connectionResult = connectionResults[machine.id];
-                    const connectionStatus = connectionResult?.status.toLowerCase();
-                    const connectionResultType = connectionStatus === "success" || connectionStatus === "ok" ? "ok" : "error";
+                    const isTestingConnection = Boolean(testingMachineIDs[machine.id]);
 
                     return (
                       <tr key={machine.id}>
@@ -194,40 +195,46 @@ export default function MachinesPage(props: MachinesPageProps) {
                               <button className="secondary-button" onClick={() => startEditMachine(machine)} type="button">
                                 {t("machinesEdit")}
                               </button>
-                              <button className="secondary-button" onClick={() => void onTestConnection(machine.id)} type="button">
-                                {t("machinesTest")}
+                              <button
+                                className="secondary-button"
+                                disabled={isTestingConnection}
+                                onClick={() => void onTestConnection(machine.id)}
+                                type="button"
+                              >
+                                {isTestingConnection ? t("machinesTesting") : t("machinesTest")}
                               </button>
                               <button className="danger-button" onClick={() => void onDeleteMachine(machine.id)} type="button">
                                 {t("machinesDelete")}
                               </button>
                             </div>
-                            {connectionResult ? (
-                              connectionResultType === "ok" ? (
-                                <span
-                                  className="machine-test-result ok machine-test-success-icon"
-                                  title={connectionResult.vnstat_version || undefined}
-                                  aria-label={t("machinesTestResult", {
-                                    status: formatStatusText(connectionResult.status, language),
-                                  })}
-                                >
-                                  ✓
-                                </span>
-                              ) : (
-                                <span
-                                  className={`machine-test-result ${connectionResultType}`}
-                                  title={connectionResult.vnstat_version || undefined}
-                                >
-                                  <span className="machine-test-dot" aria-hidden="true" />
-                                  <span className="machine-test-label">
-                                    {t("machinesTestResult", {
+                            {isTestingConnection || connectionResult ? (
+                              <div className={`machine-test-summary${isTestingConnection ? " pending" : ""}`}>
+                                {isTestingConnection ? (
+                                  <span className="machine-test-pending">{t("machinesTesting")}</span>
+                                ) : connectionResult ? (
+                                  <>
+                                    <div className="machine-test-checks" title={t("machinesTestResult", {
                                       status: formatStatusText(connectionResult.status, language),
-                                    })}
-                                  </span>
-                                  {connectionResult.vnstat_version ? (
-                                    <span className="machine-test-version">{shortVnstatVersion(connectionResult.vnstat_version)}</span>
-                                  ) : null}
-                                </span>
-                              )
+                                    })}>
+                                      <span className={`machine-test-check ${connectionResult.ssh_reachable ? "ok" : "error"}`}>
+                                        <span aria-hidden="true">{connectionResult.ssh_reachable ? "✓" : "×"}</span>
+                                        {t("machinesCheckSSH")}
+                                      </span>
+                                      <span className={`machine-test-check ${connectionResult.vnstat_ready ? "ok" : "error"}`}>
+                                        <span aria-hidden="true">{connectionResult.vnstat_ready ? "✓" : "×"}</span>
+                                        {t("machinesCheckVNStat")}
+                                      </span>
+                                      <span className={`machine-test-check ${connectionResult.network_interface_ready ? "ok" : "error"}`}>
+                                        <span aria-hidden="true">{connectionResult.network_interface_ready ? "✓" : "×"}</span>
+                                        {t("machinesCheckInterface")}
+                                      </span>
+                                    </div>
+                                    {connectionResult.vnstat_version ? (
+                                      <span className="machine-test-version">{shortVnstatVersion(connectionResult.vnstat_version)}</span>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                              </div>
                             ) : null}
                           </div>
                         </td>
@@ -263,7 +270,7 @@ export default function MachinesPage(props: MachinesPageProps) {
                 <h3 className="panel-title">{editingMachineID ? t("machinesEditTitle") : t("machinesCreateTitle")}</h3>
               </div>
               <button className="secondary-button modal-close-button" onClick={closeMachineModal} type="button">
-                {t("cancel")}
+                {t("close")}
               </button>
             </div>
 

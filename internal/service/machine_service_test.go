@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,11 +83,16 @@ func (stub stubDecryptor) Decrypt(_ string) ([]byte, error) {
 }
 
 type stubSSHRunner struct {
-	result SSHExecutionResult
-	err    error
+	result  SSHExecutionResult
+	err     error
+	command *string
 }
 
-func (runner stubSSHRunner) Run(_ context.Context, _ string, _ int, _ string, _ []byte, _ string) (SSHExecutionResult, error) {
+func (runner stubSSHRunner) Run(_ context.Context, _ string, _ int, _ string, _ []byte, command string) (SSHExecutionResult, error) {
+	if runner.command != nil {
+		*runner.command = command
+	}
+
 	return runner.result, runner.err
 }
 
@@ -127,6 +133,7 @@ func TestMachineServiceTestConnection(t *testing.T) {
 		},
 	}}
 
+	var command string
 	service := &MachineService{
 		machineStore: store,
 		sshKeyStore: &stubSSHKeyLookup{items: map[uint]*model.SSHKey{
@@ -135,7 +142,7 @@ func TestMachineServiceTestConnection(t *testing.T) {
 		dataProtector: stubDecryptor{plaintext: []byte("private-key")},
 		sshRunner: stubSSHRunner{result: SSHExecutionResult{
 			Stdout: "vnStat 2.12 by Teemu Toivola",
-		}},
+		}, command: &command},
 		sshConfig: config.SSHConfig{DialTimeout: 5 * time.Second, CommandTimeout: 5 * time.Second},
 	}
 
@@ -143,6 +150,109 @@ func TestMachineServiceTestConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.SSHReachable)
 	require.True(t, resp.VNStatReady)
+	require.True(t, resp.NetworkInterfaceReady)
 	require.Equal(t, "vnStat 2.12 by Teemu Toivola", resp.VNStatVersion)
 	require.Equal(t, "ok", resp.Status)
+	require.True(t, strings.Contains(command, "vnstat --json -i 'eth0'"))
+}
+
+func TestMachineServiceTestConnectionReturnsVNStatUnavailableForMissingInterface(t *testing.T) {
+	store := &stubMachineStore{items: map[uint]*model.Machine{
+		1: {
+			Base:             model.Base{ID: 1},
+			Name:             "host-a",
+			Host:             "10.0.0.1",
+			Port:             22,
+			SSHUser:          "root",
+			NetworkInterface: "missing0",
+			SSHKeyID:         1,
+		},
+	}}
+
+	service := &MachineService{
+		machineStore: store,
+		sshKeyStore: &stubSSHKeyLookup{items: map[uint]*model.SSHKey{
+			1: {Base: model.Base{ID: 1}, PrivateKeyCiphertext: "cipher"},
+		}},
+		dataProtector: stubDecryptor{plaintext: []byte("private-key")},
+		sshRunner: stubSSHRunner{
+			result: SSHExecutionResult{Stdout: vnstatInterfaceMissingMarker + "\nvnStat 2.12 by Teemu Toivola\n"},
+			err:    errors.New("run ssh command: exit status 1"),
+		},
+		sshConfig: config.SSHConfig{DialTimeout: 5 * time.Second, CommandTimeout: 5 * time.Second},
+	}
+
+	resp, err := service.TestConnection(context.Background(), 1)
+	require.NoError(t, err)
+	require.True(t, resp.SSHReachable)
+	require.True(t, resp.VNStatReady)
+	require.False(t, resp.NetworkInterfaceReady)
+	require.Equal(t, "vnstat_interface_missing", resp.Status)
+	require.Equal(t, "vnStat 2.12 by Teemu Toivola", resp.VNStatVersion)
+}
+
+func TestMachineServiceTestConnectionReturnsVNStatUnavailableWhenVNStatIsMissing(t *testing.T) {
+	store := &stubMachineStore{items: map[uint]*model.Machine{
+		1: {
+			Base:             model.Base{ID: 1},
+			Name:             "host-a",
+			Host:             "10.0.0.1",
+			Port:             22,
+			SSHUser:          "root",
+			NetworkInterface: "eth0",
+			SSHKeyID:         1,
+		},
+	}}
+
+	service := &MachineService{
+		machineStore: store,
+		sshKeyStore: &stubSSHKeyLookup{items: map[uint]*model.SSHKey{
+			1: {Base: model.Base{ID: 1}, PrivateKeyCiphertext: "cipher"},
+		}},
+		dataProtector: stubDecryptor{plaintext: []byte("private-key")},
+		sshRunner: stubSSHRunner{
+			result: SSHExecutionResult{Stdout: vnstatNotInstalledMarker + "\n"},
+			err:    errors.New("run ssh command: exit status 127"),
+		},
+		sshConfig: config.SSHConfig{DialTimeout: 5 * time.Second, CommandTimeout: 5 * time.Second},
+	}
+
+	resp, err := service.TestConnection(context.Background(), 1)
+	require.NoError(t, err)
+	require.True(t, resp.SSHReachable)
+	require.False(t, resp.VNStatReady)
+	require.False(t, resp.NetworkInterfaceReady)
+	require.Equal(t, "vnstat_not_installed", resp.Status)
+	require.Empty(t, resp.VNStatVersion)
+}
+
+func TestMachineServiceTestConnectionReturnsSSHFailedWhenSSHIsUnreachable(t *testing.T) {
+	store := &stubMachineStore{items: map[uint]*model.Machine{
+		1: {
+			Base:             model.Base{ID: 1},
+			Name:             "host-a",
+			Host:             "10.0.0.1",
+			Port:             22,
+			SSHUser:          "root",
+			NetworkInterface: "eth0",
+			SSHKeyID:         1,
+		},
+	}}
+
+	service := &MachineService{
+		machineStore: store,
+		sshKeyStore: &stubSSHKeyLookup{items: map[uint]*model.SSHKey{
+			1: {Base: model.Base{ID: 1}, PrivateKeyCiphertext: "cipher"},
+		}},
+		dataProtector: stubDecryptor{plaintext: []byte("private-key")},
+		sshRunner:     stubSSHRunner{err: errors.New("dial ssh: i/o timeout")},
+		sshConfig:     config.SSHConfig{DialTimeout: 5 * time.Second, CommandTimeout: 5 * time.Second},
+	}
+
+	resp, err := service.TestConnection(context.Background(), 1)
+	require.NoError(t, err)
+	require.False(t, resp.SSHReachable)
+	require.False(t, resp.VNStatReady)
+	require.False(t, resp.NetworkInterfaceReady)
+	require.Equal(t, "ssh_failed", resp.Status)
 }

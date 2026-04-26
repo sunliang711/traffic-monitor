@@ -93,7 +93,7 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
                 <p className="section-description">{props.selectedMachine.host}</p>
               </div>
               <button className="secondary-button modal-close-button" onClick={() => setMachineModalOpen(false)} type="button">
-                {t("cancel")}
+                {t("close")}
               </button>
             </div>
 

@@ -136,10 +136,18 @@ func (handler *MachineHandler) TestConnection(ctx *gin.Context) {
 
 		handler.log.Error().Err(err).Uint("machine_id", machineID).Msg("machine connection test failed")
 		if errors.Is(err, service.ErrVNStatUnavailable) {
+			message := "vnstat unavailable"
+			switch result.Status {
+			case "vnstat_not_installed":
+				message = "vnstat not installed"
+			case "vnstat_interface_missing":
+				message = "vnstat interface not found"
+			}
+
 			ctx.JSON(http.StatusBadRequest, dto.Response{
 				Code:    http.StatusBadRequest,
 				Data:    result,
-				Message: "vnstat unavailable",
+				Message: message,
 			})
 			return
 		}

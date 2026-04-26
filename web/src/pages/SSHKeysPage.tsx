@@ -243,7 +243,7 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                 </h3>
               </div>
               <button className="secondary-button modal-close-button" onClick={closeModal} type="button">
-                {t("cancel")}
+                {t("close")}
               </button>
             </div>
 
