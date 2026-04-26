@@ -163,10 +163,93 @@ LOG_FORMAT=console
 
 ## Docker 部署
 
-项目提供了多阶段 `Dockerfile` 和 `docker-compose.yml`。Compose 会启动两个服务：
+如果已经 clone 了源码，`docker-compose.yml` 在项目根目录。Compose 会启动两个服务：
 
 - `postgres`：PostgreSQL 16，数据持久化到 `postgres_data` volume
 - `app`：`traffic-monitor` 应用，前端会在镜像构建阶段打包并嵌入 Go 二进制
+
+### 快速启动脚本
+
+如果是在一台新机器上快速启动，不需要提前准备源码仓库或 `docker-compose.yml`，直接执行下面这段脚本即可。脚本会创建 `traffic-monitor` 目录，生成 `.env` 和 `docker-compose.yml`，然后使用 `latest` 镜像启动服务。
+
+```bash
+set -eu
+
+mkdir -p traffic-monitor
+cd traffic-monitor
+
+if [ ! -f .env ]; then
+  INIT_ADMIN_PASSWORD="$(openssl rand -hex 12)"
+  cat > .env <<EOF
+APP_PORT=8080
+POSTGRES_PORT=5432
+POSTGRES_DB=traffic_monitor
+POSTGRES_USER=traffic_monitor
+SESSION_SECRET=$(openssl rand -hex 32)
+APP_MASTER_KEY=$(openssl rand -base64 32)
+INIT_ADMIN_USERNAME=admin
+INIT_ADMIN_PASSWORD=${INIT_ADMIN_PASSWORD}
+POSTGRES_PASSWORD=$(openssl rand -hex 16)
+EOF
+  echo "Generated .env with admin password: ${INIT_ADMIN_PASSWORD}"
+fi
+
+if [ ! -f docker-compose.yml ]; then
+  cat > docker-compose.yml <<'EOF'
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-traffic_monitor}
+      POSTGRES_USER: ${POSTGRES_USER:-traffic_monitor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-traffic_monitor} -d ${POSTGRES_DB:-traffic_monitor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  app:
+    image: sunliang711/traffic-monitor:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      HTTP_ADDR: ":8080"
+      POSTGRES_DSN: host=postgres user=${POSTGRES_USER:-traffic_monitor} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB:-traffic_monitor} port=5432 sslmode=disable
+      SESSION_SECRET: ${SESSION_SECRET}
+      APP_MASTER_KEY: ${APP_MASTER_KEY}
+      INIT_ADMIN_USERNAME: ${INIT_ADMIN_USERNAME}
+      INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      COLLECTOR_INTERVAL: ${COLLECTOR_INTERVAL:-300s}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 300s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  postgres_data:
+EOF
+fi
+
+docker compose pull
+docker compose up -d
+docker compose ps
+echo "Web UI: http://127.0.0.1:8080"
+```
 
 ### 1. 准备环境变量
 
