@@ -46,11 +46,10 @@ function formatTestDuration(elapsedMS?: number) {
   }
 
   if (safeElapsedMS < 10000) {
-    const elapsedSeconds = safeElapsedMS / 1000;
-    return safeElapsedMS % 1000 === 0 ? `${elapsedSeconds.toFixed(0)}s` : `${elapsedSeconds.toFixed(1)}s`;
+    return `${(safeElapsedMS / 1000).toFixed(3)}s`;
   }
 
-  return `${Math.round(safeElapsedMS / 1000)}s`;
+  return `${(safeElapsedMS / 1000).toFixed(1)}s`;
 }
 
 function formatTestDurationPair(backendElapsedMS?: number, frontendElapsedMS?: number) {
