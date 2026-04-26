@@ -129,20 +129,23 @@ func (service *AlertService) EvaluateSamples(ctx context.Context, machineID uint
 	}
 
 	now := time.Now().UTC()
+	createdAlerts := make([]*model.Alert, 0)
 	for _, sample := range samples {
 		if !isCompletedAlertPeriod(sample, now) {
 			continue
 		}
 
-		if err := service.evaluateSample(ctx, sample, ruleMap); err != nil {
+		alerts, err := service.evaluateSample(ctx, sample, ruleMap)
+		if err != nil {
 			return err
 		}
+		createdAlerts = append(createdAlerts, alerts...)
 	}
 
-	return nil
+	return service.dispatchAlerts(ctx, createdAlerts)
 }
 
-func (service *AlertService) evaluateSample(ctx context.Context, sample model.TrafficSample, ruleMap map[string]dto.ThresholdRuleResp) error {
+func (service *AlertService) evaluateSample(ctx context.Context, sample model.TrafficSample, ruleMap map[string]dto.ThresholdRuleResp) ([]*model.Alert, error) {
 	metrics := []struct {
 		metricType string
 		actualMB   float64
@@ -152,6 +155,7 @@ func (service *AlertService) evaluateSample(ctx context.Context, sample model.Tr
 		{metricType: thresholdMetricTotal, actualMB: sample.TotalMB},
 	}
 
+	createdAlerts := make([]*model.Alert, 0)
 	for _, metric := range metrics {
 		rule, ok := ruleMap[thresholdRuleKey(sample.PeriodType, metric.metricType)]
 		if !ok || !rule.Enabled || metric.actualMB <= rule.ThresholdMB {
@@ -171,22 +175,28 @@ func (service *AlertService) evaluateSample(ctx context.Context, sample model.Tr
 
 		created, err := service.alertStore.CreateIfAbsent(ctx, alert)
 		if err != nil {
-			return fmt.Errorf("create alert: %w", err)
+			return nil, fmt.Errorf("create alert: %w", err)
 		}
 
 		if !created {
 			continue
 		}
 
-		if err := service.dispatchAlert(ctx, alert); err != nil {
-			return err
-		}
+		createdAlerts = append(createdAlerts, alert)
 	}
 
-	return nil
+	return createdAlerts, nil
 }
 
 func (service *AlertService) dispatchAlert(ctx context.Context, alert *model.Alert) error {
+	return service.dispatchAlerts(ctx, []*model.Alert{alert})
+}
+
+func (service *AlertService) dispatchAlerts(ctx context.Context, alerts []*model.Alert) error {
+	if len(alerts) == 0 {
+		return nil
+	}
+
 	channels, err := service.notificationChannelStore.List(ctx)
 	if err != nil {
 		return fmt.Errorf("list notification channels: %w", err)
@@ -200,41 +210,82 @@ func (service *AlertService) dispatchAlert(ctx context.Context, alert *model.Ale
 	}
 
 	if len(enabledChannels) == 0 {
-		service.log.Info().
-			Uint("machine_id", alert.MachineID).
-			Str("period_type", alert.PeriodType).
-			Str("metric_type", alert.MetricType).
-			Msg("alert skipped without enabled notification channels")
-		return service.alertStore.UpdateNotifyStatus(ctx, alert.ID, alertNotifyStatusSkipped)
+		for _, alert := range alerts {
+			service.log.Info().
+				Uint("machine_id", alert.MachineID).
+				Str("period_type", alert.PeriodType).
+				Str("metric_type", alert.MetricType).
+				Msg("alert skipped without enabled notification channels")
+			if err := service.alertStore.UpdateNotifyStatus(ctx, alert.ID, alertNotifyStatusSkipped); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 
-	allSucceeded := true
+	alertSucceeded := make(map[uint]bool, len(alerts))
+	for _, alert := range alerts {
+		alertSucceeded[alert.ID] = true
+	}
+
 	for _, channel := range enabledChannels {
-		delivery := &model.NotificationDelivery{
-			AlertID:     alert.ID,
-			ChannelType: channel.ChannelType,
-		}
-
-		responseExcerpt, sendErr := service.sendNotification(ctx, channel, alert)
-		if sendErr != nil {
-			allSucceeded = false
-			delivery.Success = false
-			delivery.ErrorMessage = trimMessage(sendErr.Error())
-		} else {
-			delivery.Success = true
-			delivery.ResponseExcerpt = trimMessage(responseExcerpt)
-		}
-
-		if err := service.notificationDeliveryStore.Create(ctx, delivery); err != nil {
-			return fmt.Errorf("create notification delivery: %w", err)
+		switch channel.ChannelType {
+		case channelTypeTelegram:
+			responseExcerpt, sendErr := service.sendTelegramBatch(ctx, channel.ConfigJSON, alerts)
+			for _, alert := range alerts {
+				if err := service.createNotificationDelivery(ctx, channel.ChannelType, alert, responseExcerpt, sendErr); err != nil {
+					return err
+				}
+				if sendErr != nil {
+					alertSucceeded[alert.ID] = false
+				}
+			}
+		default:
+			for _, alert := range alerts {
+				responseExcerpt, sendErr := service.sendNotification(ctx, channel, alert)
+				if err := service.createNotificationDelivery(ctx, channel.ChannelType, alert, responseExcerpt, sendErr); err != nil {
+					return err
+				}
+				if sendErr != nil {
+					alertSucceeded[alert.ID] = false
+				}
+			}
 		}
 	}
 
-	if allSucceeded {
-		return service.alertStore.UpdateNotifyStatus(ctx, alert.ID, alertNotifyStatusSent)
+	for _, alert := range alerts {
+		notifyStatus := alertNotifyStatusSent
+		if !alertSucceeded[alert.ID] {
+			notifyStatus = alertNotifyStatusFailed
+		}
+		if err := service.alertStore.UpdateNotifyStatus(ctx, alert.ID, notifyStatus); err != nil {
+			return err
+		}
 	}
 
-	return service.alertStore.UpdateNotifyStatus(ctx, alert.ID, alertNotifyStatusFailed)
+	return nil
+}
+
+func (service *AlertService) createNotificationDelivery(ctx context.Context, channelType string, alert *model.Alert, responseExcerpt string, sendErr error) error {
+	delivery := &model.NotificationDelivery{
+		AlertID:     alert.ID,
+		ChannelType: channelType,
+	}
+
+	if sendErr != nil {
+		delivery.Success = false
+		delivery.ErrorMessage = trimMessage(sendErr.Error())
+	} else {
+		delivery.Success = true
+		delivery.ResponseExcerpt = trimMessage(responseExcerpt)
+	}
+
+	if err := service.notificationDeliveryStore.Create(ctx, delivery); err != nil {
+		return fmt.Errorf("create notification delivery: %w", err)
+	}
+
+	return nil
 }
 
 func (service *AlertService) sendNotification(ctx context.Context, channel model.NotificationChannel, alert *model.Alert) (string, error) {
@@ -276,13 +327,17 @@ func (service *AlertService) sendWebhook(ctx context.Context, configJSON string,
 }
 
 func (service *AlertService) sendTelegram(ctx context.Context, configJSON string, alert *model.Alert) (string, error) {
+	return service.sendTelegramBatch(ctx, configJSON, []*model.Alert{alert})
+}
+
+func (service *AlertService) sendTelegramBatch(ctx context.Context, configJSON string, alerts []*model.Alert) (string, error) {
 	var cfg telegramChannelConfig
 
 	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
 		return "", fmt.Errorf("decode telegram config: %w", err)
 	}
 
-	req, _, err := service.renderTelegramRequest(ctx, cfg, alert)
+	req, _, err := service.renderTelegramBatchRequest(ctx, cfg, alerts)
 	if err != nil {
 		return "", err
 	}
@@ -785,9 +840,13 @@ func (service *AlertService) buildNotificationProxy(ctx context.Context, proxyID
 }
 
 func (service *AlertService) renderTelegramRequest(ctx context.Context, cfg telegramChannelConfig, alert *model.Alert) (*http.Request, string, error) {
+	return service.renderTelegramBatchRequest(ctx, cfg, []*model.Alert{alert})
+}
+
+func (service *AlertService) renderTelegramBatchRequest(ctx context.Context, cfg telegramChannelConfig, alerts []*model.Alert) (*http.Request, string, error) {
 	botToken := strings.TrimSpace(cfg.BotToken)
 	chatID := strings.TrimSpace(cfg.ChatID)
-	if botToken == "" || chatID == "" {
+	if botToken == "" || chatID == "" || len(alerts) == 0 {
 		return nil, "", ErrInvalidNotificationChannel
 	}
 
@@ -796,10 +855,15 @@ func (service *AlertService) renderTelegramRequest(ctx context.Context, cfg tele
 		messageTemplate = defaultTelegramMessage
 	}
 
-	renderedMessage, err := renderWebhookTemplate(messageTemplate, service.buildWebhookTemplateData(ctx, alert))
-	if err != nil {
-		return nil, "", fmt.Errorf("render telegram message template: %w", err)
+	renderedMessages := make([]string, 0, len(alerts))
+	for _, alert := range alerts {
+		renderedMessage, err := renderWebhookTemplate(messageTemplate, service.buildWebhookTemplateData(ctx, alert))
+		if err != nil {
+			return nil, "", fmt.Errorf("render telegram message template: %w", err)
+		}
+		renderedMessages = append(renderedMessages, renderedMessage)
 	}
+	renderedMessage := strings.Join(renderedMessages, "\n\n")
 
 	bodyPayload, err := json.Marshal(map[string]string{
 		"chat_id": chatID,

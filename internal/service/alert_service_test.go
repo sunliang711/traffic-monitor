@@ -519,6 +519,67 @@ func TestAlertServiceSupportsBareWebhookTemplateVariables(t *testing.T) {
 	require.True(t, deliveryStore.deliveries[0].Success)
 }
 
+func TestAlertServiceAggregatesTelegramAlerts(t *testing.T) {
+	alertStore := &stubAlertStore{}
+	channelStore := &stubNotificationChannelStore{
+		channels: []model.NotificationChannel{
+			{
+				ChannelType: channelTypeTelegram,
+				Enabled:     true,
+				ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001","message":"{{metric_type}}={{actual_human_readable}}/{{threshold_human_readable}}"}`,
+			},
+		},
+	}
+	deliveryStore := &stubNotificationDeliveryStore{}
+	httpClient := &stubHTTPClient{
+		statusCode: http.StatusOK,
+		body:       `{"ok":true}`,
+	}
+	service := &AlertService{
+		alertStore:                alertStore,
+		notificationChannelStore:  channelStore,
+		notificationDeliveryStore: deliveryStore,
+		thresholdProvider: &stubThresholdProvider{
+			rules: []dto.ThresholdRuleResp{
+				{PeriodType: thresholdPeriodDaily, MetricType: thresholdMetricUpload, ThresholdMB: 100, Enabled: true},
+				{PeriodType: thresholdPeriodDaily, MetricType: thresholdMetricDownload, ThresholdMB: 100, Enabled: true},
+			},
+		},
+		httpClient: httpClient,
+		log:        zerolog.Nop(),
+	}
+
+	samples := []model.TrafficSample{
+		{
+			MachineID:   2,
+			PeriodType:  thresholdPeriodDaily,
+			BucketTime:  time.Now().UTC().AddDate(0, 0, -1),
+			UploadMB:    120,
+			DownloadMB:  130,
+			CollectedAt: time.Now().UTC(),
+		},
+	}
+
+	require.NoError(t, service.EvaluateSamples(context.Background(), 2, samples))
+	require.Len(t, alertStore.list, 2)
+	require.Len(t, deliveryStore.deliveries, 2)
+	require.Len(t, httpClient.requests, 1)
+	require.Equal(t, alertNotifyStatusSent, alertStore.list[0].NotifyStatus)
+	require.Equal(t, alertNotifyStatusSent, alertStore.list[1].NotifyStatus)
+
+	req := httpClient.requests[0]
+	require.Equal(t, http.MethodPost, req.Method)
+	require.Equal(t, "https://api.telegram.org/bot1234567890abcdef/sendMessage", req.URL.String())
+
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(body, &payload))
+	require.Equal(t, "10001", payload["chat_id"])
+	require.Equal(t, "upload=120.000 MB/100.000 MB\n\ndownload=130.000 MB/100.000 MB", payload["text"])
+}
+
 func TestAlertServiceListNotificationChannelsIncludesWebhookTemplates(t *testing.T) {
 	service := &AlertService{
 		notificationChannelStore: &stubNotificationChannelStore{
