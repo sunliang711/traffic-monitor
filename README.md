@@ -181,7 +181,7 @@ cd traffic-monitor
 if [ ! -f .env ]; then
   INIT_ADMIN_PASSWORD="$(openssl rand -hex 12)"
   cat > .env <<EOF
-APP_PORT=8080
+APP_PORT=8086
 POSTGRES_PORT=5432
 POSTGRES_DB=traffic_monitor
 POSTGRES_USER=traffic_monitor
@@ -222,7 +222,7 @@ services:
         condition: service_healthy
     environment:
       APP_ENV: production
-      HTTP_ADDR: ":8080"
+      HTTP_ADDR: ":8086"
       POSTGRES_DSN: host=postgres user=${POSTGRES_USER:-traffic_monitor} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB:-traffic_monitor} port=5432 sslmode=disable
       SESSION_SECRET: ${SESSION_SECRET}
       APP_MASTER_KEY: ${APP_MASTER_KEY}
@@ -232,13 +232,13 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-json}
       COLLECTOR_INTERVAL: ${COLLECTOR_INTERVAL:-300s}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8086/healthz || exit 1"]
       interval: 300s
       timeout: 5s
       start_period: 20s
       retries: 3
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "${APP_PORT:-8086}:8086"
 
 volumes:
   postgres_data:
@@ -248,7 +248,7 @@ fi
 docker compose pull
 docker compose up -d
 docker compose ps
-echo "Web UI: http://127.0.0.1:8080"
+echo "Web UI: http://127.0.0.1:8086"
 ```
 
 ### 1. 准备环境变量
@@ -274,7 +274,7 @@ POSTGRES_PASSWORD=replace-with-strong-postgres-password
 | 变量名 | 必填 | 敏感 | 默认值 | 说明 |
 |--------|:---:|:---:|--------|------|
 | `APP_ENV` | 否 | 否 | `production` | 应用运行环境 |
-| `APP_PORT` | 否 | 否 | `8080` | 宿主机暴露的 Web 端口 |
+| `APP_PORT` | 否 | 否 | `8086` | 宿主机暴露的 Web 端口 |
 | `POSTGRES_PORT` | 否 | 否 | `5432` | 宿主机暴露的 PostgreSQL 端口 |
 | `POSTGRES_DB` | 否 | 否 | `traffic_monitor` | PostgreSQL 数据库名 |
 | `POSTGRES_USER` | 否 | 否 | `traffic_monitor` | PostgreSQL 用户名 |
@@ -316,8 +316,8 @@ docker compose logs -f app
 
 启动后默认访问：
 
-- 管理后台：`http://127.0.0.1:8080`
-- 健康检查：`http://127.0.0.1:8080/healthz`
+- 管理后台：`http://127.0.0.1:8086`
+- 健康检查：`http://127.0.0.1:8086/healthz`
 - PostgreSQL：`127.0.0.1:5432`
 
 ### 3. 常用运维命令
@@ -372,7 +372,7 @@ docker compose up -d
 ### 5. 部署后验证
 
 ```bash
-curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8086/healthz
 ```
 
 正常响应示例：

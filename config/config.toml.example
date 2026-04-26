@@ -9,7 +9,7 @@ max_workers = 5
 retry_times = 1
 
 [http]
-addr = ":8080"
+addr = ":8086"
 read_timeout = "10s"
 write_timeout = "10s"
 stop_timeout = "15s"

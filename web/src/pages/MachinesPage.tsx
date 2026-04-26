@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import type { ConnectionTestResponse, Machine, SSHKey } from "../types";
 import type { MachineFormState } from "../lib/app-types";
 import { formatStatusText } from "../lib/app-utils";
@@ -34,6 +35,23 @@ function shortVnstatVersion(version: string) {
   return matched?.[1] ?? version;
 }
 
+function formatTestDuration(elapsedMS?: number) {
+  if (typeof elapsedMS !== "number") {
+    return "";
+  }
+
+  const safeElapsedMS = Math.max(0, Math.round(elapsedMS));
+  if (safeElapsedMS < 1000) {
+    return `${safeElapsedMS}ms`;
+  }
+
+  if (safeElapsedMS < 10000) {
+    return `${(safeElapsedMS / 1000).toFixed(1)}s`;
+  }
+
+  return `${Math.round(safeElapsedMS / 1000)}s`;
+}
+
 const suggestedNetworkInterfaces = ["eth0", "ens18"];
 const customNetworkInterfaceValue = "custom";
 
@@ -48,9 +66,12 @@ function networkInterfaceMode(value: string) {
 export default function MachinesPage(props: MachinesPageProps) {
   const { language, t } = useI18n();
   const [isMachineModalOpen, setMachineModalOpen] = useState(false);
+  const [testPopoverMachineID, setTestPopoverMachineID] = useState<number | null>(null);
+  const [testPopoverPosition, setTestPopoverPosition] = useState({ top: 0, left: 0 });
   const [networkInterfaceSelectValue, setNetworkInterfaceSelectValue] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const testButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const enabledMachines = props.machines.filter((machine) => machine.collect_enabled).length;
   const {
     busy,
@@ -70,6 +91,24 @@ export default function MachinesPage(props: MachinesPageProps) {
   } = props;
   const totalPages = Math.max(1, Math.ceil(machines.length / pageSize));
   const visibleMachines = machines.slice((page - 1) * pageSize, page * pageSize);
+  const testPopoverMachine = testPopoverMachineID
+    ? machines.find((machine) => machine.id === testPopoverMachineID) ?? null
+    : null;
+  const testPopoverResult = testPopoverMachineID ? connectionResults[testPopoverMachineID] : undefined;
+  const isTestPopoverPending = testPopoverMachineID ? Boolean(testingMachineIDs[testPopoverMachineID]) : false;
+  const testPopoverDuration = formatTestDuration(testPopoverResult?.elapsed_ms);
+  const testPopoverStatusText = isTestPopoverPending
+    ? t("machinesTesting")
+    : testPopoverResult
+      ? formatStatusText(testPopoverResult.status, language)
+      : t("machinesTestNotRun");
+  const testPopoverStatusClass = isTestPopoverPending || !testPopoverResult ? "idle" : testPopoverResult.status === "ok" ? "ok" : "error";
+  const testPopoverMeta = [
+    testPopoverResult?.vnstat_version ? shortVnstatVersion(testPopoverResult.vnstat_version) : "",
+    testPopoverDuration ? t("machinesTestDuration", { value: testPopoverDuration }) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   useEffect(() => {
     if (editingMachineID) {
@@ -81,6 +120,72 @@ export default function MachinesPage(props: MachinesPageProps) {
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    if (!testPopoverMachineID) {
+      return;
+    }
+
+    if (!visibleMachines.some((machine) => machine.id === testPopoverMachineID)) {
+      setTestPopoverMachineID(null);
+    }
+  }, [testPopoverMachineID, visibleMachines]);
+
+  useEffect(() => {
+    function handleDocumentMouseDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".machine-test-popover") || target?.closest(".machine-test-button")) {
+        return;
+      }
+
+      setTestPopoverMachineID(null);
+    }
+
+    function handleDocumentKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setTestPopoverMachineID(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown);
+      document.removeEventListener("keydown", handleDocumentKeyDown);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    function updateTestPopoverPosition() {
+      if (!testPopoverMachineID) {
+        return;
+      }
+
+      const button = testButtonRefs.current[testPopoverMachineID];
+      if (!button) {
+        return;
+      }
+
+      const rect = button.getBoundingClientRect();
+      const popoverWidth = Math.min(340, window.innerWidth - 32);
+      const popoverHeight = 240;
+      const left = Math.min(Math.max(16, rect.right - popoverWidth), window.innerWidth - popoverWidth - 16);
+      let top = rect.bottom + 10;
+      if (top + popoverHeight > window.innerHeight) {
+        top = Math.max(16, rect.top - popoverHeight - 10);
+      }
+
+      setTestPopoverPosition({ top, left });
+    }
+
+    updateTestPopoverPosition();
+    window.addEventListener("resize", updateTestPopoverPosition);
+    window.addEventListener("scroll", updateTestPopoverPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateTestPopoverPosition);
+      window.removeEventListener("scroll", updateTestPopoverPosition, true);
+    };
+  }, [testPopoverMachineID]);
 
   function openCreateMachineModal() {
     onResetMachineForm();
@@ -119,6 +224,11 @@ export default function MachinesPage(props: MachinesPageProps) {
     }
 
     onUpdateMachineForm("networkInterface", value);
+  }
+
+  function handleTestConnection(machineID: number) {
+    setTestPopoverMachineID(machineID);
+    void onTestConnection(machineID);
   }
 
   return (
@@ -168,12 +278,11 @@ export default function MachinesPage(props: MachinesPageProps) {
                     <th>{t("machinesNetworkInterface")}</th>
                     <th>SSH Key</th>
                     <th>{t("machinesCollectEnabled")}</th>
-                    <th>{t("machinesActionsAndResult")}</th>
+                    <th>{t("machinesActions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleMachines.map((machine) => {
-                    const connectionResult = connectionResults[machine.id];
                     const isTestingConnection = Boolean(testingMachineIDs[machine.id]);
 
                     return (
@@ -196,9 +305,12 @@ export default function MachinesPage(props: MachinesPageProps) {
                                 {t("machinesEdit")}
                               </button>
                               <button
-                                className="secondary-button"
+                                ref={(element) => {
+                                  testButtonRefs.current[machine.id] = element;
+                                }}
+                                className="secondary-button machine-test-button"
                                 disabled={isTestingConnection}
-                                onClick={() => void onTestConnection(machine.id)}
+                                onClick={() => handleTestConnection(machine.id)}
                                 type="button"
                               >
                                 {isTestingConnection ? t("machinesTesting") : t("machinesTest")}
@@ -207,35 +319,6 @@ export default function MachinesPage(props: MachinesPageProps) {
                                 {t("machinesDelete")}
                               </button>
                             </div>
-                            {isTestingConnection || connectionResult ? (
-                              <div className={`machine-test-summary${isTestingConnection ? " pending" : ""}`}>
-                                {isTestingConnection ? (
-                                  <span className="machine-test-pending">{t("machinesTesting")}</span>
-                                ) : connectionResult ? (
-                                  <>
-                                    <div className="machine-test-checks" title={t("machinesTestResult", {
-                                      status: formatStatusText(connectionResult.status, language),
-                                    })}>
-                                      <span className={`machine-test-check ${connectionResult.ssh_reachable ? "ok" : "error"}`}>
-                                        <span aria-hidden="true">{connectionResult.ssh_reachable ? "✓" : "×"}</span>
-                                        {t("machinesCheckSSH")}
-                                      </span>
-                                      <span className={`machine-test-check ${connectionResult.vnstat_ready ? "ok" : "error"}`}>
-                                        <span aria-hidden="true">{connectionResult.vnstat_ready ? "✓" : "×"}</span>
-                                        {t("machinesCheckVNStat")}
-                                      </span>
-                                      <span className={`machine-test-check ${connectionResult.network_interface_ready ? "ok" : "error"}`}>
-                                        <span aria-hidden="true">{connectionResult.network_interface_ready ? "✓" : "×"}</span>
-                                        {t("machinesCheckInterface")}
-                                      </span>
-                                    </div>
-                                    {connectionResult.vnstat_version ? (
-                                      <span className="machine-test-version">{shortVnstatVersion(connectionResult.vnstat_version)}</span>
-                                    ) : null}
-                                  </>
-                                ) : null}
-                              </div>
-                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -360,6 +443,57 @@ export default function MachinesPage(props: MachinesPageProps) {
           </section>
         </div>
       ) : null}
+
+      {testPopoverMachine
+        ? createPortal(
+            <section
+              className="machine-test-popover"
+              style={{ top: testPopoverPosition.top, left: testPopoverPosition.left }}
+              aria-label={t("machinesTestResult", {
+                status: testPopoverStatusText,
+              })}
+              role="dialog"
+            >
+              <div className="machine-test-popover-header">
+                <div className="machine-test-popover-machine">
+                  <strong>{testPopoverMachine.name}</strong>
+                  <p className="card-meta">
+                    {testPopoverMachine.host}:{testPopoverMachine.port}
+                  </p>
+                </div>
+                <div className="machine-test-popover-result">
+                  <span className={`status-badge ${testPopoverStatusClass}`}>{testPopoverStatusText}</span>
+                  {testPopoverMeta ? <span className="machine-test-popover-meta">{testPopoverMeta}</span> : null}
+                </div>
+                <button
+                  className="machine-test-popover-close"
+                  onClick={() => setTestPopoverMachineID(null)}
+                  aria-label={t("close")}
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
+              {testPopoverResult ? (
+                <div className="machine-test-popover-checks">
+                  <span className={`machine-test-check ${testPopoverResult.ssh_reachable ? "ok" : "error"}`}>
+                    <span aria-hidden="true">{testPopoverResult.ssh_reachable ? "✓" : "×"}</span>
+                    {t("machinesCheckSSH")}
+                  </span>
+                  <span className={`machine-test-check ${testPopoverResult.vnstat_ready ? "ok" : "error"}`}>
+                    <span aria-hidden="true">{testPopoverResult.vnstat_ready ? "✓" : "×"}</span>
+                    {t("machinesCheckVNStat")}
+                  </span>
+                  <span className={`machine-test-check ${testPopoverResult.network_interface_ready ? "ok" : "error"}`}>
+                    <span aria-hidden="true">{testPopoverResult.network_interface_ready ? "✓" : "×"}</span>
+                    {t("machinesCheckInterface")}
+                  </span>
+                </div>
+              ) : null}
+            </section>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

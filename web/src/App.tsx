@@ -940,12 +940,13 @@ function App() {
   }
 
   async function handleTestConnection(id: number) {
+    const startedAt = Date.now();
     setTestingMachineIDs((current) => ({ ...current, [id]: true }));
     setError("");
     setToast("");
     try {
       const result = await post<ConnectionTestResponse>(`/api/v1/machines/${id}/test-connection`);
-      setConnectionResults((current) => ({ ...current, [id]: result }));
+      setConnectionResults((current) => ({ ...current, [id]: { ...result, elapsed_ms: Date.now() - startedAt } }));
     } catch {
       setConnectionResults((current) => ({
         ...current,
@@ -956,6 +957,7 @@ function App() {
           network_interface_ready: false,
           vnstat_version: "",
           status: "error",
+          elapsed_ms: Date.now() - startedAt,
         },
       }));
     } finally {

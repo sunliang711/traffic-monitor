@@ -33,7 +33,7 @@
 - 已执行 `docker compose config`，配置解析通过
 - 已执行 `docker build -t traffic-monitor:test .`，镜像构建通过
 - 已执行 `docker compose up -d --build`
-- 已验证 `GET http://127.0.0.1:8080/healthz` 返回：
+- 已验证 `GET http://127.0.0.1:8086/healthz` 返回：
 
 ```json
 {"code":200,"data":{"app_name":"traffic-monitor","db":"up","env":"production","status":"ok"},"message":"success"}

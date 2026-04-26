@@ -28,7 +28,7 @@ RUN apk add --no-cache ca-certificates tzdata wget
 
 COPY --from=backend-builder /out/traffic-monitor /usr/local/bin/traffic-monitor
 
-EXPOSE 8080
+EXPOSE 8086
 
 
 

@@ -39,18 +39,25 @@ export default function NotificationsPage(props: NotificationsPageProps) {
   const { t } = useI18n();
   const [isWebhookConfigOpen, setWebhookConfigOpen] = useState(false);
   const notificationVariables = [
-    "{{machine_id}}",
-    "{{machine_name}}",
-    "{{machine_host}}",
-    "{{period_type}}",
-    "{{metric_type}}",
-    "{{bucket_time}}",
-    "{{threshold_mb}}",
-    "{{threshold_human_readable}}",
-    "{{actual_mb}}",
-    "{{actual_human_readable}}",
-    "{{alert_key}}",
+    { token: "{{machine_id}}", description: t("notificationsVariableMachineID") },
+    { token: "{{machine_name}}", description: t("notificationsVariableMachineName") },
+    { token: "{{machine_host}}", description: t("notificationsVariableMachineHost") },
+    { token: "{{period_type}}", description: t("notificationsVariablePeriodType") },
+    { token: "{{metric_type}}", description: t("notificationsVariableMetricType") },
+    { token: "{{bucket_time}}", description: t("notificationsVariableBucketTime") },
+    { token: "{{bucket_time_rfc3339}}", description: t("notificationsVariableBucketTimeRFC3339") },
+    { token: "{{threshold_mb}}", description: t("notificationsVariableThresholdMB") },
+    { token: "{{threshold_human_readable}}", description: t("notificationsVariableThresholdHumanReadable") },
+    { token: "{{actual_mb}}", description: t("notificationsVariableActualMB") },
+    { token: "{{actual_human_readable}}", description: t("notificationsVariableActualHumanReadable") },
+    { token: "{{alert_key}}", description: t("notificationsVariableAlertKey") },
   ];
+  const recommendedNotificationTemplate = `🚨 Bandwidth Limit Exceeded
+
+🖥 {{machine_name}} ({{machine_host}})
+📊 {{metric_type}} / {{period_type}}
+📈 {{actual_human_readable}} / {{threshold_human_readable}}
+🕒 {{bucket_time_rfc3339}}`;
   const notificationProxyLabel = (proxyID?: number) => {
     const notificationProxy = props.notificationProxies.find((proxy) => proxy.id === proxyID);
     if (notificationProxy) {
@@ -312,11 +319,16 @@ export default function NotificationsPage(props: NotificationsPageProps) {
                 <p className="card-meta">
                   {t("notificationsVariablesDesc")}
                 </p>
-                <div className="variable-chip-list">
+                <dl className="variable-description-list">
                   {notificationVariables.map((variable) => (
-                    <code key={variable}>{variable}</code>
+                    <div className="variable-description-item" key={variable.token}>
+                      <dt><code>{variable.token}</code></dt>
+                      <dd>{variable.description}</dd>
+                    </div>
                   ))}
-                </div>
+                </dl>
+                <p className="card-meta notification-template-title">{t("notificationsRecommendedTemplate")}</p>
+                <pre className="code-block">{recommendedNotificationTemplate}</pre>
               </div>
               {props.webhookPreview ? (
                 <div className="card">
@@ -431,11 +443,16 @@ export default function NotificationsPage(props: NotificationsPageProps) {
                 <p className="card-meta">
                   {t("notificationsTelegramVariablesDesc")}
                 </p>
-                <div className="variable-chip-list">
+                <dl className="variable-description-list">
                   {notificationVariables.map((variable) => (
-                    <code key={variable}>{variable}</code>
+                    <div className="variable-description-item" key={variable.token}>
+                      <dt><code>{variable.token}</code></dt>
+                      <dd>{variable.description}</dd>
+                    </div>
                   ))}
-                </div>
+                </dl>
+                <p className="card-meta notification-template-title">{t("notificationsRecommendedTemplate")}</p>
+                <pre className="code-block">{recommendedNotificationTemplate}</pre>
               </div>
               {props.telegramPreview ? (
                 <div className="card">
