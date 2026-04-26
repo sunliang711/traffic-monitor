@@ -134,6 +134,54 @@ tbody tr:hover td {
   background: #152033;
 }
 
+.bucket-group-row td {
+  background: var(--bucket-group-row-bg, var(--table-body));
+}
+
+.bucket-group-row:hover td {
+  background: var(--bucket-group-row-hover-bg, #152033);
+}
+
+.card.bucket-group-card {
+  background: var(--bucket-group-card-bg, #172234);
+}
+
+.bucket-group-tone-0 {
+  --bucket-group-row-bg: linear-gradient(0deg, rgba(20, 184, 166, 0.12), rgba(20, 184, 166, 0.12)), var(--table-body);
+  --bucket-group-row-hover-bg: linear-gradient(0deg, rgba(20, 184, 166, 0.18), rgba(20, 184, 166, 0.18)), #152033;
+  --bucket-group-card-bg: linear-gradient(0deg, rgba(20, 184, 166, 0.12), rgba(20, 184, 166, 0.12)), #172234;
+}
+
+.bucket-group-tone-1 {
+  --bucket-group-row-bg: linear-gradient(0deg, rgba(245, 184, 75, 0.11), rgba(245, 184, 75, 0.11)), var(--table-body);
+  --bucket-group-row-hover-bg: linear-gradient(0deg, rgba(245, 184, 75, 0.17), rgba(245, 184, 75, 0.17)), #152033;
+  --bucket-group-card-bg: linear-gradient(0deg, rgba(245, 184, 75, 0.11), rgba(245, 184, 75, 0.11)), #172234;
+}
+
+.bucket-group-tone-2 {
+  --bucket-group-row-bg: linear-gradient(0deg, rgba(99, 102, 241, 0.13), rgba(99, 102, 241, 0.13)), var(--table-body);
+  --bucket-group-row-hover-bg: linear-gradient(0deg, rgba(99, 102, 241, 0.19), rgba(99, 102, 241, 0.19)), #152033;
+  --bucket-group-card-bg: linear-gradient(0deg, rgba(99, 102, 241, 0.13), rgba(99, 102, 241, 0.13)), #172234;
+}
+
+.bucket-group-tone-3 {
+  --bucket-group-row-bg: linear-gradient(0deg, rgba(244, 114, 182, 0.11), rgba(244, 114, 182, 0.11)), var(--table-body);
+  --bucket-group-row-hover-bg: linear-gradient(0deg, rgba(244, 114, 182, 0.17), rgba(244, 114, 182, 0.17)), #152033;
+  --bucket-group-card-bg: linear-gradient(0deg, rgba(244, 114, 182, 0.11), rgba(244, 114, 182, 0.11)), #172234;
+}
+
+.bucket-group-tone-4 {
+  --bucket-group-row-bg: linear-gradient(0deg, rgba(56, 189, 248, 0.11), rgba(56, 189, 248, 0.11)), var(--table-body);
+  --bucket-group-row-hover-bg: linear-gradient(0deg, rgba(56, 189, 248, 0.17), rgba(56, 189, 248, 0.17)), #152033;
+  --bucket-group-card-bg: linear-gradient(0deg, rgba(56, 189, 248, 0.11), rgba(56, 189, 248, 0.11)), #172234;
+}
+
+.bucket-group-tone-5 {
+  --bucket-group-row-bg: linear-gradient(0deg, rgba(168, 85, 247, 0.12), rgba(168, 85, 247, 0.12)), var(--table-body);
+  --bucket-group-row-hover-bg: linear-gradient(0deg, rgba(168, 85, 247, 0.18), rgba(168, 85, 247, 0.18)), #152033;
+  --bucket-group-card-bg: linear-gradient(0deg, rgba(168, 85, 247, 0.12), rgba(168, 85, 247, 0.12)), #172234;
+}
+
 code,
 pre {
   font-family: "SFMono-Regular", "JetBrains Mono", "Consolas", monospace;
@@ -860,12 +908,42 @@ a {
 }
 
 .sample-auto-refresh-button {
-  min-width: 188px;
+  justify-content: flex-start;
+  min-width: 226px;
 }
 
 .sample-auto-refresh-button.open {
   border-color: rgba(94, 234, 212, 0.72);
   box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.2);
+}
+
+.sample-auto-refresh-button.enabled:not(.open) {
+  border-color: rgba(94, 234, 212, 0.46);
+}
+
+.sample-auto-refresh-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sample-auto-refresh-state {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #b8c3d2;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sample-auto-refresh-state.enabled {
+  background: rgba(20, 184, 166, 0.18);
+  color: #7df4e9;
 }
 
 .refresh-icon {

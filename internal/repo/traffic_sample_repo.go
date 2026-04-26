@@ -79,6 +79,9 @@ func (repo *TrafficSampleRepo) List(ctx context.Context, filter TrafficSampleFil
 
 	var samples []model.TrafficSample
 	if err := query.Order("bucket_time desc").
+		Order("period_type desc").
+		Order("machine_id asc").
+		Order("id asc").
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
 		Find(&samples).Error; err != nil {

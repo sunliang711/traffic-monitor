@@ -186,6 +186,28 @@ export function formatTime(value: string, language: Language) {
   return new Date(value).toLocaleString(localeTag(language), { hour12: false });
 }
 
+function bucketToneKey(periodType: string, bucketTime: string) {
+  return `${periodType}:${bucketTime}`;
+}
+
+export function buildBucketToneMap<T extends { bucket_time: string; period_type: string }>(items: T[]) {
+  const toneMap = new Map<string, number>();
+
+  items.forEach((item) => {
+    const key = bucketToneKey(item.period_type, item.bucket_time);
+    if (!toneMap.has(key)) {
+      // 按首次出现顺序分配颜色，保证同一页内相同周期与桶时间颜色一致。
+      toneMap.set(key, toneMap.size % 6);
+    }
+  });
+
+  return toneMap;
+}
+
+export function bucketGroupToneClassName(periodType: string, bucketTime: string, toneMap: Map<string, number>) {
+  return `bucket-group-tone-${toneMap.get(bucketToneKey(periodType, bucketTime)) ?? 0}`;
+}
+
 export function formatNumber(value: number) {
   return value.toFixed(3);
 }

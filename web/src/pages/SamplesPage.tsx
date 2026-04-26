@@ -1,12 +1,54 @@
 import { useEffect, useRef, useState } from "react";
 import type { CollectNowResponse, TrafficSample } from "../types";
 import type { MachineOption } from "../lib/app-types";
-import { formatPeriodType, formatStatusText, formatTime, formatTrafficValue, machineDisplay } from "../lib/app-utils";
+import {
+  bucketGroupToneClassName,
+  buildBucketToneMap,
+  formatPeriodType,
+  formatStatusText,
+  formatTime,
+  formatTrafficValue,
+  machineDisplay,
+} from "../lib/app-utils";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
 import PageSizeSelect from "../components/PageSizeSelect";
 
 const autoRefreshOptions = [5, 10, 15, 30];
+const sampleAutoRefreshStorageKey = "traffic-monitor-samples-auto-refresh";
+
+type SampleAutoRefreshPreference = {
+  enabled: boolean;
+  interval: number;
+};
+
+const defaultAutoRefreshPreference: SampleAutoRefreshPreference = {
+  enabled: false,
+  interval: 30,
+};
+
+function readSampleAutoRefreshPreference(): SampleAutoRefreshPreference {
+  if (typeof window === "undefined") {
+    return defaultAutoRefreshPreference;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(sampleAutoRefreshStorageKey);
+    if (!raw) {
+      return defaultAutoRefreshPreference;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<SampleAutoRefreshPreference>;
+    return {
+      enabled: parsed.enabled === true,
+      interval: typeof parsed.interval === "number" && autoRefreshOptions.includes(parsed.interval)
+        ? parsed.interval
+        : defaultAutoRefreshPreference.interval,
+    };
+  } catch {
+    return defaultAutoRefreshPreference;
+  }
+}
 
 type SamplesPageProps = {
   busy: boolean;
@@ -42,9 +84,12 @@ export default function SamplesPage(props: SamplesPageProps) {
   const { language, t } = useI18n();
   const refreshCallback = useRef(props.onRefresh);
   const busyRef = useRef(props.busy);
+  const autoRefreshWrapperRef = useRef<HTMLDivElement | null>(null);
   const [isAutoRefreshMenuOpen, setAutoRefreshMenuOpen] = useState(false);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(30);
+  const [autoRefreshPreference, setAutoRefreshPreference] = useState(readSampleAutoRefreshPreference);
+  const autoRefreshEnabled = autoRefreshPreference.enabled;
+  const autoRefreshInterval = autoRefreshPreference.interval;
+  const sampleBucketToneMap = buildBucketToneMap(props.samples);
   const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
 
   useEffect(() => {
@@ -54,6 +99,31 @@ export default function SamplesPage(props: SamplesPageProps) {
   useEffect(() => {
     busyRef.current = props.busy;
   }, [props.busy]);
+
+  useEffect(() => {
+    if (!isAutoRefreshMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && autoRefreshWrapperRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setAutoRefreshMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isAutoRefreshMenuOpen]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(sampleAutoRefreshStorageKey, JSON.stringify(autoRefreshPreference));
+    } catch {
+      // 忽略本地存储写入失败，自动刷新控件仍按内存状态工作。
+    }
+  }, [autoRefreshPreference]);
 
   useEffect(() => {
     if (!autoRefreshEnabled) {
@@ -101,22 +171,27 @@ export default function SamplesPage(props: SamplesPageProps) {
             >
               <RefreshIcon />
             </button>
-            <div className="sample-auto-refresh-wrapper">
+            <div className="sample-auto-refresh-wrapper" ref={autoRefreshWrapperRef}>
               <button
-                className={`secondary-button sample-auto-refresh-button${isAutoRefreshMenuOpen ? " open" : ""}`}
+                className={`secondary-button sample-auto-refresh-button${isAutoRefreshMenuOpen ? " open" : ""}${autoRefreshEnabled ? " enabled" : ""}`}
                 aria-expanded={isAutoRefreshMenuOpen}
                 aria-haspopup="menu"
                 onClick={() => setAutoRefreshMenuOpen((current) => !current)}
                 type="button"
               >
                 <RefreshIcon />
-                <span>{t("samplesAutoRefresh")}</span>
+                <span className="sample-auto-refresh-label">{t("samplesAutoRefresh")}</span>
+                <span className={`sample-auto-refresh-state${autoRefreshEnabled ? " enabled" : ""}`}>
+                  {autoRefreshEnabled
+                    ? t("samplesAutoRefreshOn", { seconds: autoRefreshInterval })
+                    : t("samplesAutoRefreshOff")}
+                </span>
               </button>
               {isAutoRefreshMenuOpen ? (
                 <div className="sample-auto-refresh-menu" role="menu">
                   <button
                     className={`sample-auto-refresh-menu-item${autoRefreshEnabled ? " active" : ""}`}
-                    onClick={() => setAutoRefreshEnabled((current) => !current)}
+                    onClick={() => setAutoRefreshPreference((current) => ({ ...current, enabled: !current.enabled }))}
                     role="menuitemcheckbox"
                     aria-checked={autoRefreshEnabled}
                     type="button"
@@ -129,8 +204,7 @@ export default function SamplesPage(props: SamplesPageProps) {
                     <button
                       className={`sample-auto-refresh-menu-item${autoRefreshInterval === seconds ? " active" : ""}`}
                       onClick={() => {
-                        setAutoRefreshInterval(seconds);
-                        setAutoRefreshEnabled(true);
+                        setAutoRefreshPreference({ enabled: true, interval: seconds });
                         setAutoRefreshMenuOpen(false);
                       }}
                       role="menuitemradio"
@@ -212,9 +286,10 @@ export default function SamplesPage(props: SamplesPageProps) {
                 <tbody>
                   {props.samples.map((sample) => {
                     const machine = machineDisplay(props.machineOptions, sample.machine_id, language);
+                    const bucketToneClassName = bucketGroupToneClassName(sample.period_type, sample.bucket_time, sampleBucketToneMap);
 
                     return (
-                      <tr key={`${sample.id}-${sample.period_type}`}>
+                      <tr className={`bucket-group-row ${bucketToneClassName}`} key={`${sample.id}-${sample.period_type}`}>
                         <td>
                           <div className="machine-cell">
                             <strong>{machine.primary}</strong>
@@ -236,9 +311,10 @@ export default function SamplesPage(props: SamplesPageProps) {
             <div className="mobile-card-list">
               {props.samples.map((sample) => {
                 const machine = machineDisplay(props.machineOptions, sample.machine_id, language);
+                const bucketToneClassName = bucketGroupToneClassName(sample.period_type, sample.bucket_time, sampleBucketToneMap);
 
                 return (
-                  <article className="card mobile-record-card" key={`${sample.id}-${sample.period_type}`}>
+                  <article className={`card mobile-record-card bucket-group-card ${bucketToneClassName}`} key={`${sample.id}-${sample.period_type}`}>
                     <div className="card-header">
                       <div className="machine-cell">
                         <strong>{machine.primary}</strong>
