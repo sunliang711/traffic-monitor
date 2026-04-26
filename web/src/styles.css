@@ -1510,6 +1510,20 @@ a {
   word-break: break-word;
 }
 
+.notification-proxy-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.notification-proxy-table {
+  min-width: 860px;
+}
+
+.notification-proxy-table td {
+  vertical-align: middle;
+}
+
 .webhook-form-grid {
   grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
   align-items: start;
@@ -1899,6 +1913,7 @@ a {
   .two-columns,
   .machine-form-grid,
   .backup-form-grid,
+  .notification-proxy-form-grid,
   .webhook-form-grid,
   .telegram-form-grid {
     grid-template-columns: 1fr;

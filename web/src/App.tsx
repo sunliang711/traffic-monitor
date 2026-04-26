@@ -7,6 +7,7 @@ import { useI18n } from "./lib/i18n";
 import type {
   LoginFormState,
   MachineFormState,
+  NotificationProxyFormState,
   SSHKeyGenerateState,
   SSHKeyImportState,
   TabKey,
@@ -47,6 +48,7 @@ import type {
   EncryptedBackup,
   Machine,
   NotificationChannel,
+  NotificationProxy,
   SSHKey,
   TelegramTestResponse,
   ThresholdRule,
@@ -66,6 +68,13 @@ const emptyMachineForm = (): MachineFormState => ({
   remark: "",
 });
 
+const emptyNotificationProxyForm = (): NotificationProxyFormState => ({
+  id: null,
+  name: "",
+  proxyType: "http",
+  url: "",
+});
+
 const emptyBackupExportForm = () => ({
   password: "",
   includeAllMachines: true,
@@ -75,6 +84,11 @@ const emptyBackupExportForm = () => ({
 });
 
 const defaultListPageSize = 50;
+
+function notificationProxyIDPayload(value: string) {
+  const normalizedValue = value.trim();
+  return normalizedValue ? Number(normalizedValue) : null;
+}
 
 function AppIcon() {
   return (
@@ -132,6 +146,7 @@ function App() {
   const [sshKeys, setSSHKeys] = useState<SSHKey[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [notificationChannels, setNotificationChannels] = useState<NotificationChannel[]>([]);
+  const [notificationProxies, setNotificationProxies] = useState<NotificationProxy[]>([]);
   const [samples, setSamples] = useState<TrafficSample[]>([]);
   const [samplesTotal, setSamplesTotal] = useState(0);
   const [samplesPage, setSamplesPage] = useState(1);
@@ -159,13 +174,16 @@ function App() {
     url: "",
     headersText: "{}",
     bodyText: "",
+    proxyID: "",
   });
   const [telegramForm, setTelegramForm] = useState<TelegramFormState>({
     enabled: false,
     botToken: "",
     chatID: "",
     messageText: defaultTelegramMessageTemplate,
+    proxyID: "",
   });
+  const [notificationProxyForm, setNotificationProxyForm] = useState<NotificationProxyFormState>(emptyNotificationProxyForm());
   const [connectionResults, setConnectionResults] = useState<Record<number, ConnectionTestResponse>>({});
   const [testingMachineIDs, setTestingMachineIDs] = useState<Record<number, boolean>>({});
   const [collectResults, setCollectResults] = useState<CollectNowResponse["results"]>([]);
@@ -175,6 +193,7 @@ function App() {
   const [machineThresholdsSaved, setMachineThresholdsSaved] = useState(true);
   const [webhookSaved, setWebhookSaved] = useState(true);
   const [telegramSaved, setTelegramSaved] = useState(true);
+  const [notificationProxySaved, setNotificationProxySaved] = useState(true);
   const [machineFormSaved, setMachineFormSaved] = useState(true);
 
   const machineOptions = useMemo(
@@ -319,11 +338,12 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      const [sshKeysResp, machinesResp, globalRules, channelsResp, samplesResp, alertsResp] = await Promise.all([
+      const [sshKeysResp, machinesResp, globalRules, channelsResp, proxiesResp, samplesResp, alertsResp] = await Promise.all([
         get<SSHKey[]>("/api/v1/ssh-keys"),
         get<Machine[]>("/api/v1/machines"),
         get<ThresholdRule[]>("/api/v1/thresholds/global"),
         get<NotificationChannel[]>("/api/v1/notification-channels"),
+        get<NotificationProxy[]>("/api/v1/notification-proxies"),
         get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID, nextSamplesPageSize, nextSamplePeriodType)),
         get<AlertList>(alertsPath(nextAlertsPage, nextAlertMachineID, nextAlertsPageSize)),
       ]);
@@ -332,7 +352,8 @@ function App() {
       setMachines(machinesResp);
       setGlobalThresholdForm(toThresholdFormRows(globalRules));
       setNotificationChannels(channelsResp);
-      syncChannelForms(channelsResp);
+      setNotificationProxies(proxiesResp);
+      syncChannelForms(channelsResp, proxiesResp);
       setSamples(samplesResp.items);
       setSamplesTotal(samplesResp.total);
       setAlerts(alertsResp.items);
@@ -373,9 +394,11 @@ function App() {
     }
   }
 
-  function syncChannelForms(channels: NotificationChannel[]) {
+  function syncChannelForms(channels: NotificationChannel[], proxies: NotificationProxy[]) {
     const webhook = channels.find((channel) => channel.channel_type === "webhook");
     const telegram = channels.find((channel) => channel.channel_type === "telegram");
+    const proxyIDValue = (proxyID?: number) =>
+      proxyID && proxies.some((proxy) => proxy.id === proxyID) ? String(proxyID) : "";
 
     setWebhookForm((current) => ({
       ...current,
@@ -384,6 +407,7 @@ function App() {
       url: webhook?.url ?? "",
       headersText: webhook?.headers ? JSON.stringify(webhook.headers, null, 2) : "{}",
       bodyText: webhook?.body ?? "",
+      proxyID: proxyIDValue(webhook?.proxy_id),
     }));
     setWebhookSaved(true);
 
@@ -392,6 +416,7 @@ function App() {
       chatID: telegram?.chat_id ?? "",
       botToken: telegram?.token_masked ?? "",
       messageText: telegram?.message ?? defaultTelegramMessageTemplate,
+      proxyID: proxyIDValue(telegram?.proxy_id),
     });
     setTelegramSaved(true);
   }
@@ -974,19 +999,54 @@ function App() {
     });
   }
 
+  async function handleSaveNotificationProxy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = {
+      name: notificationProxyForm.name,
+      proxy_type: notificationProxyForm.proxyType,
+      url: notificationProxyForm.url,
+    };
+
+    await submitAction(async () => {
+      if (notificationProxyForm.id) {
+        await put<NotificationProxy, typeof payload>(`/api/v1/notification-proxies/${notificationProxyForm.id}`, payload);
+        setToast(t("notificationProxyUpdateSuccess"));
+      } else {
+        await post<NotificationProxy, typeof payload>("/api/v1/notification-proxies", payload);
+        setToast(t("notificationProxyCreateSuccess"));
+      }
+      setNotificationProxyForm(emptyNotificationProxyForm());
+      setNotificationProxySaved(true);
+      await loadProtectedData();
+    });
+  }
+
+  async function handleDeleteNotificationProxy(id: number) {
+    await submitAction(async () => {
+      await del<null>(`/api/v1/notification-proxies/${id}`);
+      if (notificationProxyForm.id === id) {
+        setNotificationProxyForm(emptyNotificationProxyForm());
+        setNotificationProxySaved(true);
+      }
+      await loadProtectedData();
+      setToast(t("notificationProxyDeleteSuccess"));
+    });
+  }
+
   async function handleSaveWebhook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitAction(async () => {
       const parsedHeaders = safeParseHeaders(webhookForm.headersText, language);
       await put<
         null,
-        { enabled: boolean; method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string }
+        { enabled: boolean; method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string; proxy_id: number | null }
       >("/api/v1/notification-channels/webhook", {
         enabled: webhookForm.enabled,
         method: webhookForm.method,
         url: webhookForm.url,
         headers: parsedHeaders,
         body: webhookForm.bodyText,
+        proxy_id: notificationProxyIDPayload(webhookForm.proxyID),
       });
       await loadProtectedData();
       setWebhookSaved(true);
@@ -999,12 +1059,13 @@ function App() {
       const parsedHeaders = safeParseHeaders(webhookForm.headersText, language);
       const response = await post<
         WebhookTestResponse,
-        { method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string }
+        { method: "GET" | "POST"; url: string; headers: Record<string, string>; body: string; proxy_id: number | null }
       >("/api/v1/notification-channels/webhook/test", {
         method: webhookForm.method,
         url: webhookForm.url,
         headers: parsedHeaders,
         body: webhookForm.bodyText,
+        proxy_id: notificationProxyIDPayload(webhookForm.proxyID),
       });
 
       setWebhookPreview({
@@ -1019,13 +1080,14 @@ function App() {
   async function handleSaveTelegram(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitAction(async () => {
-      await put<null, { enabled: boolean; bot_token: string; chat_id: string; message: string }>(
+      await put<null, { enabled: boolean; bot_token: string; chat_id: string; message: string; proxy_id: number | null }>(
         "/api/v1/notification-channels/telegram",
         {
           enabled: telegramForm.enabled,
           bot_token: telegramForm.botToken,
           chat_id: telegramForm.chatID,
           message: telegramForm.messageText,
+          proxy_id: notificationProxyIDPayload(telegramForm.proxyID),
         },
       );
       setTelegramForm((current) => ({ ...current, botToken: "" }));
@@ -1039,11 +1101,12 @@ function App() {
     await submitAction(async () => {
       const response = await post<
         TelegramTestResponse,
-        { bot_token: string; chat_id: string; message: string }
+        { bot_token: string; chat_id: string; message: string; proxy_id: number | null }
       >("/api/v1/notification-channels/telegram/test", {
         bot_token: telegramForm.botToken,
         chat_id: telegramForm.chatID,
         message: telegramForm.messageText,
+        proxy_id: notificationProxyIDPayload(telegramForm.proxyID),
       });
 
       setTelegramPreview({
@@ -1109,6 +1172,26 @@ function App() {
   function updateMachineForm<Key extends keyof MachineFormState>(key: Key, value: MachineFormState[Key]) {
     setMachineForm((current) => ({ ...current, [key]: value }));
     setMachineFormSaved(false);
+  }
+
+  function updateNotificationProxyForm(updater: (current: NotificationProxyFormState) => NotificationProxyFormState) {
+    setNotificationProxyForm((current) => updater(current));
+    setNotificationProxySaved(false);
+  }
+
+  function startEditNotificationProxy(notificationProxy: NotificationProxy) {
+    setNotificationProxyForm({
+      id: notificationProxy.id,
+      name: notificationProxy.name,
+      proxyType: notificationProxy.proxy_type,
+      url: notificationProxy.url,
+    });
+    setNotificationProxySaved(true);
+  }
+
+  function cancelEditNotificationProxy() {
+    setNotificationProxyForm(emptyNotificationProxyForm());
+    setNotificationProxySaved(true);
   }
 
   function updateWebhookForm(updater: (current: WebhookFormState) => WebhookFormState) {
@@ -1420,12 +1503,20 @@ function App() {
               <NotificationsPage
                 busy={busy}
                 notificationChannels={notificationChannels}
+                notificationProxies={notificationProxies}
+                notificationProxyForm={notificationProxyForm}
+                notificationProxySaved={notificationProxySaved}
                 webhookForm={webhookForm}
                 webhookSaved={webhookSaved}
                 webhookPreview={webhookPreview}
                 telegramForm={telegramForm}
                 telegramSaved={telegramSaved}
                 telegramPreview={telegramPreview}
+                onNotificationProxyFormChange={updateNotificationProxyForm}
+                onSaveNotificationProxy={handleSaveNotificationProxy}
+                onEditNotificationProxy={startEditNotificationProxy}
+                onCancelEditNotificationProxy={cancelEditNotificationProxy}
+                onDeleteNotificationProxy={handleDeleteNotificationProxy}
                 onWebhookFormChange={updateWebhookForm}
                 onTelegramFormChange={updateTelegramForm}
                 onSaveWebhook={handleSaveWebhook}

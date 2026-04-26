@@ -49,6 +49,16 @@ export type NotificationChannel = {
   chat_id?: string;
   message?: string;
   token_masked?: string;
+  proxy_id?: number;
+};
+
+export type NotificationProxy = {
+  id: number;
+  name: string;
+  proxy_type: "http" | "socks";
+  url: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type TrafficSample = {

@@ -45,7 +45,7 @@ func RegisterDatabaseLifecycle(lifecycle fx.Lifecycle, db *gorm.DB, cfg config.D
 				return fmt.Errorf("ping database: %w", err)
 			}
 
-			if err := db.WithContext(startContext).AutoMigrate(&model.Admin{}, &model.SSHKey{}, &model.Machine{}, &model.GlobalThresholdRule{}, &model.MachineThresholdRule{}, &model.TrafficSample{}, &model.Alert{}, &model.NotificationChannel{}, &model.NotificationDelivery{}); err != nil {
+			if err := db.WithContext(startContext).AutoMigrate(&model.Admin{}, &model.SSHKey{}, &model.Machine{}, &model.GlobalThresholdRule{}, &model.MachineThresholdRule{}, &model.TrafficSample{}, &model.Alert{}, &model.NotificationChannel{}, &model.NotificationProxy{}, &model.NotificationDelivery{}); err != nil {
 				return fmt.Errorf("auto migrate: %w", err)
 			}
 

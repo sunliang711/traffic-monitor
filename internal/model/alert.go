@@ -29,6 +29,17 @@ func (NotificationChannel) TableName() string {
 	return "notification_channels"
 }
 
+type NotificationProxy struct {
+	Base
+	Name      string `gorm:"column:name;size:100;not null"`
+	ProxyType string `gorm:"column:proxy_type;size:16;not null"`
+	URL       string `gorm:"column:url;type:text;not null"`
+}
+
+func (NotificationProxy) TableName() string {
+	return "notification_proxies"
+}
+
 type NotificationDelivery struct {
 	Base
 	AlertID         uint   `gorm:"column:alert_id;not null;index"`

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"text/template"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"traffic-monitor/internal/repo"
 
 	"github.com/rs/zerolog"
+	xproxy "golang.org/x/net/proxy"
 )
 
 const (
@@ -31,6 +34,8 @@ const (
 
 var (
 	ErrInvalidNotificationChannel = errors.New("invalid notification channel")
+	ErrInvalidNotificationProxy   = errors.New("invalid notification proxy")
+	ErrNotificationProxyNotFound  = errors.New("notification proxy not found")
 )
 
 type AlertStore interface {
@@ -42,6 +47,14 @@ type AlertStore interface {
 type NotificationChannelStore interface {
 	Upsert(ctx context.Context, channel *model.NotificationChannel) error
 	List(ctx context.Context) ([]model.NotificationChannel, error)
+}
+
+type NotificationProxyStore interface {
+	Create(ctx context.Context, notificationProxy *model.NotificationProxy) error
+	Update(ctx context.Context, notificationProxy *model.NotificationProxy) error
+	Delete(ctx context.Context, proxyID uint) error
+	GetByID(ctx context.Context, proxyID uint) (*model.NotificationProxy, error)
+	List(ctx context.Context) ([]model.NotificationProxy, error)
 }
 
 type AlertMachineStore interface {
@@ -61,15 +74,25 @@ type NotificationHTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+type webhookChannelConfig struct {
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+	ProxyID *uint             `json:"proxy_id,omitempty"`
+}
+
 type telegramChannelConfig struct {
 	BotToken string `json:"bot_token"`
 	ChatID   string `json:"chat_id"`
 	Message  string `json:"message"`
+	ProxyID  *uint  `json:"proxy_id,omitempty"`
 }
 
 type AlertService struct {
 	alertStore                AlertStore
 	notificationChannelStore  NotificationChannelStore
+	notificationProxyStore    NotificationProxyStore
 	notificationDeliveryStore NotificationDeliveryStore
 	thresholdProvider         ThresholdRuleProvider
 	machineStore              AlertMachineStore
@@ -77,10 +100,11 @@ type AlertService struct {
 	log                       zerolog.Logger
 }
 
-func NewAlertService(alertStore *repo.AlertRepo, notificationChannelStore *repo.NotificationChannelRepo, notificationDeliveryStore *repo.NotificationDeliveryRepo, thresholdProvider *ThresholdService, machineStore *repo.MachineRepo, log zerolog.Logger) *AlertService {
+func NewAlertService(alertStore *repo.AlertRepo, notificationChannelStore *repo.NotificationChannelRepo, notificationProxyStore *repo.NotificationProxyRepo, notificationDeliveryStore *repo.NotificationDeliveryRepo, thresholdProvider *ThresholdService, machineStore *repo.MachineRepo, log zerolog.Logger) *AlertService {
 	return &AlertService{
 		alertStore:                alertStore,
 		notificationChannelStore:  notificationChannelStore,
+		notificationProxyStore:    notificationProxyStore,
 		notificationDeliveryStore: notificationDeliveryStore,
 		thresholdProvider:         thresholdProvider,
 		machineStore:              machineStore,
@@ -225,12 +249,17 @@ func (service *AlertService) sendNotification(ctx context.Context, channel model
 }
 
 func (service *AlertService) sendWebhook(ctx context.Context, configJSON string, alert *model.Alert) (string, error) {
-	req, _, err := service.renderWebhookRequest(ctx, configJSON, alert)
+	cfg, err := decodeWebhookChannelConfig(configJSON)
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := service.httpClient.Do(req)
+	req, _, err := service.renderWebhookRequestFromConfig(ctx, cfg, alert)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := service.doNotificationRequest(ctx, req, cfg.ProxyID)
 	if err != nil {
 		return "", fmt.Errorf("send webhook request: %w", err)
 	}
@@ -258,7 +287,7 @@ func (service *AlertService) sendTelegram(ctx context.Context, configJSON string
 		return "", err
 	}
 
-	resp, err := service.httpClient.Do(req)
+	resp, err := service.doNotificationRequest(ctx, req, cfg.ProxyID)
 	if err != nil {
 		return "", fmt.Errorf("send telegram request: %w", err)
 	}
@@ -272,6 +301,60 @@ func (service *AlertService) sendTelegram(ctx context.Context, configJSON string
 	}
 
 	return string(body), nil
+}
+
+func (service *AlertService) doNotificationRequest(ctx context.Context, req *http.Request, proxyID *uint) (*http.Response, error) {
+	normalizedProxyID := normalizeNotificationProxyID(proxyID)
+	if normalizedProxyID == nil {
+		return service.httpClient.Do(req)
+	}
+
+	if service.notificationProxyStore == nil {
+		return nil, ErrInvalidNotificationProxy
+	}
+
+	notificationProxy, err := service.notificationProxyStore.GetByID(ctx, *normalizedProxyID)
+	if err != nil {
+		if repo.IsRecordNotFound(err) {
+			return nil, ErrInvalidNotificationProxy
+		}
+
+		return nil, fmt.Errorf("get notification proxy: %w", err)
+	}
+	if notificationProxy == nil {
+		return nil, ErrInvalidNotificationProxy
+	}
+
+	httpClient, err := buildNotificationProxyHTTPClient(notificationProxy)
+	if err != nil {
+		return nil, err
+	}
+
+	return httpClient.Do(req)
+}
+
+func (service *AlertService) validateNotificationProxyID(ctx context.Context, proxyID *uint) error {
+	normalizedProxyID := normalizeNotificationProxyID(proxyID)
+	if normalizedProxyID == nil {
+		return nil
+	}
+	if service.notificationProxyStore == nil {
+		return ErrInvalidNotificationProxy
+	}
+
+	notificationProxy, err := service.notificationProxyStore.GetByID(ctx, *normalizedProxyID)
+	if err != nil {
+		if repo.IsRecordNotFound(err) {
+			return ErrInvalidNotificationProxy
+		}
+
+		return fmt.Errorf("get notification proxy: %w", err)
+	}
+	if notificationProxy == nil {
+		return ErrInvalidNotificationProxy
+	}
+
+	return nil
 }
 
 func (service *AlertService) ListAlerts(ctx context.Context, query dto.ListAlertsQuery) (dto.AlertListResp, error) {
@@ -333,12 +416,7 @@ func (service *AlertService) ListNotificationChannels(ctx context.Context) ([]dt
 	for _, channel := range channels {
 		switch channel.ChannelType {
 		case channelTypeWebhook:
-			var cfg struct {
-				URL     string            `json:"url"`
-				Method  string            `json:"method"`
-				Headers map[string]string `json:"headers"`
-				Body    string            `json:"body"`
-			}
+			var cfg webhookChannelConfig
 			_ = json.Unmarshal([]byte(channel.ConfigJSON), &cfg)
 			method := strings.ToUpper(strings.TrimSpace(cfg.Method))
 			if method == "" {
@@ -352,6 +430,7 @@ func (service *AlertService) ListNotificationChannels(ctx context.Context) ([]dt
 				URL:         cfg.URL,
 				Headers:     cfg.Headers,
 				Body:        cfg.Body,
+				ProxyID:     cfg.ProxyID,
 			})
 		case channelTypeTelegram:
 			var cfg telegramChannelConfig
@@ -367,6 +446,7 @@ func (service *AlertService) ListNotificationChannels(ctx context.Context) ([]dt
 				ChatID:      cfg.ChatID,
 				Message:     message,
 				TokenMasked: maskToken(cfg.BotToken),
+				ProxyID:     cfg.ProxyID,
 			})
 		}
 	}
@@ -374,17 +454,77 @@ func (service *AlertService) ListNotificationChannels(ctx context.Context) ([]dt
 	return result, nil
 }
 
+func (service *AlertService) ListNotificationProxies(ctx context.Context) ([]dto.NotificationProxyResp, error) {
+	notificationProxies, err := service.notificationProxyStore.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list notification proxies: %w", err)
+	}
+
+	result := make([]dto.NotificationProxyResp, 0, len(notificationProxies))
+	for _, notificationProxy := range notificationProxies {
+		result = append(result, toNotificationProxyResp(&notificationProxy))
+	}
+
+	return result, nil
+}
+
+func (service *AlertService) CreateNotificationProxy(ctx context.Context, req dto.UpsertNotificationProxyReq) (dto.NotificationProxyResp, error) {
+	notificationProxy, err := service.buildNotificationProxy(ctx, 0, req)
+	if err != nil {
+		return dto.NotificationProxyResp{}, err
+	}
+
+	if err := service.notificationProxyStore.Create(ctx, notificationProxy); err != nil {
+		return dto.NotificationProxyResp{}, fmt.Errorf("create notification proxy: %w", err)
+	}
+
+	return toNotificationProxyResp(notificationProxy), nil
+}
+
+func (service *AlertService) UpdateNotificationProxy(ctx context.Context, proxyID uint, req dto.UpsertNotificationProxyReq) (dto.NotificationProxyResp, error) {
+	notificationProxy, err := service.buildNotificationProxy(ctx, proxyID, req)
+	if err != nil {
+		return dto.NotificationProxyResp{}, err
+	}
+
+	if err := service.notificationProxyStore.Update(ctx, notificationProxy); err != nil {
+		if repo.IsRecordNotFound(err) {
+			return dto.NotificationProxyResp{}, ErrNotificationProxyNotFound
+		}
+
+		return dto.NotificationProxyResp{}, fmt.Errorf("update notification proxy: %w", err)
+	}
+
+	return toNotificationProxyResp(notificationProxy), nil
+}
+
+func (service *AlertService) DeleteNotificationProxy(ctx context.Context, proxyID uint) error {
+	if err := service.notificationProxyStore.Delete(ctx, proxyID); err != nil {
+		if repo.IsRecordNotFound(err) {
+			return ErrNotificationProxyNotFound
+		}
+
+		return fmt.Errorf("delete notification proxy: %w", err)
+	}
+
+	return nil
+}
+
 func (service *AlertService) UpsertWebhookChannel(ctx context.Context, req dto.UpsertWebhookChannelReq) error {
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	if method == "" {
 		method = http.MethodPost
 	}
+	if err := service.validateNotificationProxyID(ctx, req.ProxyID); err != nil {
+		return err
+	}
 
-	configJSON, err := json.Marshal(map[string]interface{}{
-		"url":     strings.TrimSpace(req.URL),
-		"method":  method,
-		"headers": req.Headers,
-		"body":    req.Body,
+	configJSON, err := json.Marshal(webhookChannelConfig{
+		URL:     strings.TrimSpace(req.URL),
+		Method:  method,
+		Headers: req.Headers,
+		Body:    req.Body,
+		ProxyID: normalizeNotificationProxyID(req.ProxyID),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal webhook channel config: %w", err)
@@ -423,22 +563,28 @@ func (service *AlertService) TestWebhookChannel(ctx context.Context, req dto.Ups
 		NotifyStatus: alertNotifyStatusPending,
 	}
 
-	configJSON, err := json.Marshal(map[string]interface{}{
-		"url":     strings.TrimSpace(req.URL),
-		"method":  method,
-		"headers": req.Headers,
-		"body":    req.Body,
+	configJSON, err := json.Marshal(webhookChannelConfig{
+		URL:     strings.TrimSpace(req.URL),
+		Method:  method,
+		Headers: req.Headers,
+		Body:    req.Body,
+		ProxyID: normalizeNotificationProxyID(req.ProxyID),
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal webhook test config: %w", err)
 	}
 
-	httpRequest, previewJSON, err := service.renderWebhookRequest(ctx, string(configJSON), alert)
+	cfg, err := decodeWebhookChannelConfig(string(configJSON))
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := service.httpClient.Do(httpRequest)
+	httpRequest, previewJSON, err := service.renderWebhookRequestFromConfig(ctx, cfg, alert)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := service.doNotificationRequest(ctx, httpRequest, cfg.ProxyID)
 	if err != nil {
 		return "", fmt.Errorf("send webhook request: %w", err)
 	}
@@ -525,7 +671,7 @@ func (service *AlertService) TestTelegramChannel(ctx context.Context, req dto.Up
 		return dto.TestTelegramChannelResp{}, err
 	}
 
-	resp, err := service.httpClient.Do(httpRequest)
+	resp, err := service.doNotificationRequest(ctx, httpRequest, cfg.ProxyID)
 	if err != nil {
 		return dto.TestTelegramChannelResp{}, fmt.Errorf("send telegram request: %w", err)
 	}
@@ -557,6 +703,9 @@ func (service *AlertService) buildTelegramChannelConfig(ctx context.Context, req
 	if message == "" {
 		message = defaultTelegramMessage
 	}
+	if err := service.validateNotificationProxyID(ctx, req.ProxyID); err != nil {
+		return telegramChannelConfig{}, err
+	}
 
 	if service.notificationChannelStore != nil {
 		channels, err := service.notificationChannelStore.List(ctx)
@@ -583,7 +732,56 @@ func (service *AlertService) buildTelegramChannelConfig(ctx context.Context, req
 		BotToken: botToken,
 		ChatID:   chatID,
 		Message:  message,
+		ProxyID:  normalizeNotificationProxyID(req.ProxyID),
 	}, nil
+}
+
+func (service *AlertService) buildNotificationProxy(ctx context.Context, proxyID uint, req dto.UpsertNotificationProxyReq) (*model.NotificationProxy, error) {
+	name := strings.TrimSpace(req.Name)
+	proxyType := normalizeNotificationProxyType(req.ProxyType)
+	proxyURL := strings.TrimSpace(req.URL)
+
+	var existing *model.NotificationProxy
+	if proxyID != 0 {
+		notificationProxy, err := service.notificationProxyStore.GetByID(ctx, proxyID)
+		if err != nil {
+			if repo.IsRecordNotFound(err) {
+				return nil, ErrNotificationProxyNotFound
+			}
+
+			return nil, fmt.Errorf("get notification proxy: %w", err)
+		}
+		existing = notificationProxy
+		if existing == nil {
+			return nil, ErrNotificationProxyNotFound
+		}
+		if proxyURL == maskProxyURL(existing.URL) {
+			proxyURL = existing.URL
+		}
+	}
+
+	if name == "" || proxyType == "" || proxyURL == "" {
+		return nil, ErrInvalidNotificationProxy
+	}
+	parsedProxyURL, err := parseNotificationProxyURL(proxyType, proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	proxyURL = parsedProxyURL.String()
+
+	notificationProxy := &model.NotificationProxy{
+		Name:      name,
+		ProxyType: proxyType,
+		URL:       proxyURL,
+	}
+	if existing != nil {
+		notificationProxy.Base = existing.Base
+	}
+	if proxyID != 0 {
+		notificationProxy.ID = proxyID
+	}
+
+	return notificationProxy, nil
 }
 
 func (service *AlertService) renderTelegramRequest(ctx context.Context, cfg telegramChannelConfig, alert *model.Alert) (*http.Request, string, error) {
@@ -673,17 +871,15 @@ func (service *AlertService) buildWebhookTemplateData(ctx context.Context, alert
 }
 
 func (service *AlertService) renderWebhookRequest(ctx context.Context, configJSON string, alert *model.Alert) (*http.Request, string, error) {
-	var cfg struct {
-		URL     string            `json:"url"`
-		Method  string            `json:"method"`
-		Headers map[string]string `json:"headers"`
-		Body    string            `json:"body"`
+	cfg, err := decodeWebhookChannelConfig(configJSON)
+	if err != nil {
+		return nil, "", err
 	}
 
-	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
-		return nil, "", fmt.Errorf("decode webhook config: %w", err)
-	}
+	return service.renderWebhookRequestFromConfig(ctx, cfg, alert)
+}
 
+func (service *AlertService) renderWebhookRequestFromConfig(ctx context.Context, cfg webhookChannelConfig, alert *model.Alert) (*http.Request, string, error) {
 	if strings.TrimSpace(cfg.URL) == "" {
 		return nil, "", ErrInvalidNotificationChannel
 	}
@@ -767,6 +963,126 @@ func (service *AlertService) renderWebhookRequest(ctx context.Context, configJSO
 	return req, string(previewPayload), nil
 }
 
+func decodeWebhookChannelConfig(configJSON string) (webhookChannelConfig, error) {
+	var cfg webhookChannelConfig
+	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+		return webhookChannelConfig{}, fmt.Errorf("decode webhook config: %w", err)
+	}
+
+	cfg.ProxyID = normalizeNotificationProxyID(cfg.ProxyID)
+	return cfg, nil
+}
+
+func buildNotificationProxyHTTPClient(notificationProxy *model.NotificationProxy) (*http.Client, error) {
+	proxyURL, err := parseNotificationProxyURL(notificationProxy.ProxyType, notificationProxy.URL)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	switch normalizeNotificationProxyType(notificationProxy.ProxyType) {
+	case "http":
+		transport.Proxy = http.ProxyURL(proxyURL)
+	case "socks":
+		dialer, err := xproxy.FromURL(proxyURL, xproxy.Direct)
+		if err != nil {
+			return nil, ErrInvalidNotificationProxy
+		}
+		contextDialer, ok := dialer.(xproxy.ContextDialer)
+		if !ok {
+			return nil, ErrInvalidNotificationProxy
+		}
+		transport.Proxy = nil
+		transport.DialContext = func(ctx context.Context, network string, address string) (net.Conn, error) {
+			return contextDialer.DialContext(ctx, network, address)
+		}
+	default:
+		return nil, ErrInvalidNotificationProxy
+	}
+
+	return &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+	}, nil
+}
+
+func parseNotificationProxyURL(proxyType string, rawURL string) (*url.URL, error) {
+	normalizedProxyType := normalizeNotificationProxyType(proxyType)
+	normalizedURL := strings.TrimSpace(rawURL)
+	if normalizedProxyType == "" || normalizedURL == "" {
+		return nil, ErrInvalidNotificationProxy
+	}
+
+	if !strings.Contains(normalizedURL, "://") {
+		switch normalizedProxyType {
+		case "http":
+			normalizedURL = "http://" + normalizedURL
+		case "socks":
+			normalizedURL = "socks5://" + normalizedURL
+		default:
+			return nil, ErrInvalidNotificationProxy
+		}
+	}
+
+	parsedURL, err := url.Parse(normalizedURL)
+	if err != nil {
+		return nil, ErrInvalidNotificationProxy
+	}
+	if parsedURL.Hostname() == "" {
+		return nil, ErrInvalidNotificationProxy
+	}
+
+	parsedURL.Scheme = strings.ToLower(parsedURL.Scheme)
+	switch normalizedProxyType {
+	case "http":
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			return nil, ErrInvalidNotificationProxy
+		}
+	case "socks":
+		if parsedURL.Scheme == "socks" {
+			parsedURL.Scheme = "socks5"
+		}
+		if parsedURL.Scheme != "socks5" && parsedURL.Scheme != "socks5h" {
+			return nil, ErrInvalidNotificationProxy
+		}
+	default:
+		return nil, ErrInvalidNotificationProxy
+	}
+
+	return parsedURL, nil
+}
+
+func normalizeNotificationProxyType(proxyType string) string {
+	switch strings.ToLower(strings.TrimSpace(proxyType)) {
+	case "http", "https":
+		return "http"
+	case "socks", "socks5", "socks5h":
+		return "socks"
+	default:
+		return ""
+	}
+}
+
+func normalizeNotificationProxyID(proxyID *uint) *uint {
+	if proxyID == nil || *proxyID == 0 {
+		return nil
+	}
+
+	normalizedProxyID := *proxyID
+	return &normalizedProxyID
+}
+
+func toNotificationProxyResp(notificationProxy *model.NotificationProxy) dto.NotificationProxyResp {
+	return dto.NotificationProxyResp{
+		ID:        notificationProxy.ID,
+		Name:      notificationProxy.Name,
+		ProxyType: notificationProxy.ProxyType,
+		URL:       maskProxyURL(notificationProxy.URL),
+		CreatedAt: notificationProxy.CreatedAt,
+		UpdatedAt: notificationProxy.UpdatedAt,
+	}
+}
+
 func renderWebhookTemplate(raw string, data map[string]interface{}) (string, error) {
 	normalizedTemplate := normalizeWebhookTemplate(raw)
 
@@ -833,6 +1149,20 @@ func maskToken(token string) string {
 	}
 
 	return token[:4] + "..." + token[len(token)-4:]
+}
+
+func maskProxyURL(rawURL string) string {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil || parsedURL.User == nil {
+		return rawURL
+	}
+
+	username := parsedURL.User.Username()
+	if _, ok := parsedURL.User.Password(); ok {
+		parsedURL.User = url.UserPassword(username, "xxxxx")
+	}
+
+	return parsedURL.String()
 }
 
 func formatTrafficMB(valueMB float64) string {

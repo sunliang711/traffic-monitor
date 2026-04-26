@@ -47,6 +47,7 @@ export type WebhookFormState = {
   url: string;
   headersText: string;
   bodyText: string;
+  proxyID: string;
 };
 
 export type WebhookPreviewState = {
@@ -64,6 +65,14 @@ export type TelegramFormState = {
   botToken: string;
   chatID: string;
   messageText: string;
+  proxyID: string;
+};
+
+export type NotificationProxyFormState = {
+  id: number | null;
+  name: string;
+  proxyType: "http" | "socks";
+  url: string;
 };
 
 export type ThresholdRulePayload = {

@@ -33,6 +33,7 @@ type UpsertWebhookChannelReq struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
+	ProxyID *uint             `json:"proxy_id"`
 }
 
 type UpsertTelegramChannelReq struct {
@@ -40,6 +41,7 @@ type UpsertTelegramChannelReq struct {
 	BotToken string `json:"bot_token"`
 	ChatID   string `json:"chat_id"`
 	Message  string `json:"message"`
+	ProxyID  *uint  `json:"proxy_id"`
 }
 
 type NotificationChannelResp struct {
@@ -53,6 +55,22 @@ type NotificationChannelResp struct {
 	ChatID      string            `json:"chat_id,omitempty"`
 	Message     string            `json:"message,omitempty"`
 	TokenMasked string            `json:"token_masked,omitempty"`
+	ProxyID     *uint             `json:"proxy_id,omitempty"`
+}
+
+type UpsertNotificationProxyReq struct {
+	Name      string `json:"name"`
+	ProxyType string `json:"proxy_type"`
+	URL       string `json:"url"`
+}
+
+type NotificationProxyResp struct {
+	ID        uint      `json:"id"`
+	Name      string    `json:"name"`
+	ProxyType string    `json:"proxy_type"`
+	URL       string    `json:"url"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type TestWebhookChannelReq struct {
@@ -60,6 +78,7 @@ type TestWebhookChannelReq struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
+	ProxyID *uint             `json:"proxy_id"`
 }
 
 type TestWebhookChannelResp struct {

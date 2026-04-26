@@ -30,6 +30,10 @@ func (handler *AlertHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup)
 	authenticatedGroup.POST("/notification-channels/webhook/test", handler.TestWebhookChannel)
 	authenticatedGroup.PUT("/notification-channels/telegram", handler.UpsertTelegramChannel)
 	authenticatedGroup.POST("/notification-channels/telegram/test", handler.TestTelegramChannel)
+	authenticatedGroup.GET("/notification-proxies", handler.ListNotificationProxies)
+	authenticatedGroup.POST("/notification-proxies", handler.CreateNotificationProxy)
+	authenticatedGroup.PUT("/notification-proxies/:id", handler.UpdateNotificationProxy)
+	authenticatedGroup.DELETE("/notification-proxies/:id", handler.DeleteNotificationProxy)
 }
 
 func (handler *AlertHandler) ListAlerts(ctx *gin.Context) {
@@ -56,6 +60,69 @@ func (handler *AlertHandler) ListNotificationChannels(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, dto.Response{Code: http.StatusOK, Data: channels, Message: "success"})
+}
+
+func (handler *AlertHandler) ListNotificationProxies(ctx *gin.Context) {
+	notificationProxies, err := handler.alertService.ListNotificationProxies(ctx.Request.Context())
+	if err != nil {
+		internalServerError(ctx)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dto.Response{Code: http.StatusOK, Data: notificationProxies, Message: "success"})
+}
+
+func (handler *AlertHandler) CreateNotificationProxy(ctx *gin.Context) {
+	var req dto.UpsertNotificationProxyReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		badRequest(ctx, "invalid request")
+		return
+	}
+
+	notificationProxy, err := handler.alertService.CreateNotificationProxy(ctx.Request.Context(), req)
+	if err != nil {
+		handleNotificationProxyError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, dto.Response{Code: http.StatusCreated, Data: notificationProxy, Message: "success"})
+}
+
+func (handler *AlertHandler) UpdateNotificationProxy(ctx *gin.Context) {
+	proxyID, err := parseUintParam(ctx.Param("id"))
+	if err != nil {
+		badRequest(ctx, "invalid notification proxy id")
+		return
+	}
+
+	var req dto.UpsertNotificationProxyReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		badRequest(ctx, "invalid request")
+		return
+	}
+
+	notificationProxy, err := handler.alertService.UpdateNotificationProxy(ctx.Request.Context(), proxyID, req)
+	if err != nil {
+		handleNotificationProxyError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dto.Response{Code: http.StatusOK, Data: notificationProxy, Message: "success"})
+}
+
+func (handler *AlertHandler) DeleteNotificationProxy(ctx *gin.Context) {
+	proxyID, err := parseUintParam(ctx.Param("id"))
+	if err != nil {
+		badRequest(ctx, "invalid notification proxy id")
+		return
+	}
+
+	if err := handler.alertService.DeleteNotificationProxy(ctx.Request.Context(), proxyID); err != nil {
+		handleNotificationProxyError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dto.Response{Code: http.StatusOK, Data: nil, Message: "success"})
 }
 
 func (handler *AlertHandler) UpsertWebhookChannel(ctx *gin.Context) {
@@ -180,6 +247,31 @@ func handleAlertServiceError(ctx *gin.Context, err error) {
 			Data:    nil,
 			Message: "invalid notification channel config",
 		})
+	case errors.Is(err, service.ErrInvalidNotificationProxy):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid notification proxy config",
+		})
+	default:
+		internalServerError(ctx)
+	}
+}
+
+func handleNotificationProxyError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidNotificationProxy):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid notification proxy config",
+		})
+	case errors.Is(err, service.ErrNotificationProxyNotFound):
+		ctx.JSON(http.StatusNotFound, dto.Response{
+			Code:    http.StatusNotFound,
+			Data:    nil,
+			Message: "notification proxy not found",
+		})
 	default:
 		internalServerError(ctx)
 	}
@@ -192,6 +284,12 @@ func handleWebhookTestError(ctx *gin.Context, err error) {
 			Code:    http.StatusBadRequest,
 			Data:    nil,
 			Message: "invalid notification channel config",
+		})
+	case errors.Is(err, service.ErrInvalidNotificationProxy):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid notification proxy config",
 		})
 	default:
 		ctx.JSON(http.StatusBadRequest, dto.Response{
@@ -209,6 +307,12 @@ func handleTelegramTestError(ctx *gin.Context, err error) {
 			Code:    http.StatusBadRequest,
 			Data:    nil,
 			Message: "invalid notification channel config",
+		})
+	case errors.Is(err, service.ErrInvalidNotificationProxy):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid notification proxy config",
 		})
 	default:
 		ctx.JSON(http.StatusBadRequest, dto.Response{

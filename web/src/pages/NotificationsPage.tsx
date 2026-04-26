@@ -1,18 +1,32 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import type { NotificationChannel } from "../types";
-import type { TelegramFormState, TelegramPreviewState, WebhookFormState, WebhookPreviewState } from "../lib/app-types";
+import type { NotificationChannel, NotificationProxy } from "../types";
+import type {
+  NotificationProxyFormState,
+  TelegramFormState,
+  TelegramPreviewState,
+  WebhookFormState,
+  WebhookPreviewState,
+} from "../lib/app-types";
 import { useI18n } from "../lib/i18n";
 
 type NotificationsPageProps = {
   busy: boolean;
   notificationChannels: NotificationChannel[];
+  notificationProxies: NotificationProxy[];
+  notificationProxyForm: NotificationProxyFormState;
+  notificationProxySaved: boolean;
   webhookForm: WebhookFormState;
   webhookSaved: boolean;
   webhookPreview: WebhookPreviewState | null;
   telegramForm: TelegramFormState;
   telegramSaved: boolean;
   telegramPreview: TelegramPreviewState | null;
+  onNotificationProxyFormChange: (updater: (current: NotificationProxyFormState) => NotificationProxyFormState) => void;
+  onSaveNotificationProxy: (event: FormEvent<HTMLFormElement>) => void;
+  onEditNotificationProxy: (notificationProxy: NotificationProxy) => void;
+  onCancelEditNotificationProxy: () => void;
+  onDeleteNotificationProxy: (id: number) => void;
   onWebhookFormChange: (updater: (current: WebhookFormState) => WebhookFormState) => void;
   onTelegramFormChange: (updater: (current: TelegramFormState) => TelegramFormState) => void;
   onSaveWebhook: (event: FormEvent<HTMLFormElement>) => void;
@@ -37,6 +51,14 @@ export default function NotificationsPage(props: NotificationsPageProps) {
     "{{actual_human_readable}}",
     "{{alert_key}}",
   ];
+  const notificationProxyLabel = (proxyID?: number) => {
+    const notificationProxy = props.notificationProxies.find((proxy) => proxy.id === proxyID);
+    if (notificationProxy) {
+      return `${notificationProxy.name} (${notificationProxy.proxy_type})`;
+    }
+
+    return proxyID ? t("notificationsProxyMissing", { id: String(proxyID) }) : t("notificationsNoProxy");
+  };
 
   return (
     <div className="page-stack">
@@ -58,8 +80,111 @@ export default function NotificationsPage(props: NotificationsPageProps) {
             {channel.url ? <p className="card-meta">{t("notificationsURL", { url: channel.url })}</p> : null}
             {channel.chat_id ? <p className="card-meta">{t("notificationsChatID", { value: channel.chat_id })}</p> : null}
             {channel.token_masked ? <p className="card-meta">{t("notificationsToken", { value: channel.token_masked })}</p> : null}
+            <p className="card-meta">{t("notificationsProxy", { value: notificationProxyLabel(channel.proxy_id) })}</p>
           </article>
         ))}
+      </section>
+
+      <section className="panel section-panel">
+        <div className="section-toolbar">
+          <div className="section-intro">
+            <div>
+              <h3 className="panel-title">{t("notificationsProxyTitle")}</h3>
+            </div>
+            <p className="section-description">{t("notificationsProxyDescription")}</p>
+          </div>
+          <div className="action-row">
+            {props.notificationProxyForm.id ? (
+              <button className="secondary-button" onClick={props.onCancelEditNotificationProxy} type="button">
+                {t("notificationsProxyCancelEdit")}
+              </button>
+            ) : null}
+            <button
+              className="primary-button"
+              disabled={props.busy || props.notificationProxySaved}
+              form="notification-proxy-form"
+              type="submit"
+            >
+              {props.notificationProxyForm.id ? t("notificationsProxyUpdate") : t("notificationsProxyCreate")}
+            </button>
+          </div>
+        </div>
+        <form id="notification-proxy-form" className="form-grid notification-proxy-form-grid" onSubmit={props.onSaveNotificationProxy}>
+          <label className="field">
+            <span>{t("notificationsProxyName")}</span>
+            <input
+              value={props.notificationProxyForm.name}
+              onChange={(event) => {
+                props.onNotificationProxyFormChange((current) => ({ ...current, name: event.target.value }));
+              }}
+              placeholder={t("notificationsProxyNamePlaceholder")}
+            />
+          </label>
+          <label className="field">
+            <span>{t("notificationsProxyType")}</span>
+            <select
+              value={props.notificationProxyForm.proxyType}
+              onChange={(event) => {
+                props.onNotificationProxyFormChange((current) => ({
+                  ...current,
+                  proxyType: event.target.value as "http" | "socks",
+                }));
+              }}
+            >
+              <option value="http">HTTP</option>
+              <option value="socks">SOCKS</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>{t("notificationsProxyURL")}</span>
+            <input
+              value={props.notificationProxyForm.url}
+              onChange={(event) => {
+                props.onNotificationProxyFormChange((current) => ({ ...current, url: event.target.value }));
+              }}
+              placeholder={props.notificationProxyForm.proxyType === "socks" ? "socks5://127.0.0.1:1080" : "http://127.0.0.1:7890"}
+            />
+          </label>
+        </form>
+        <div className="table-wrapper notification-proxy-table-wrapper">
+          <table className="notification-proxy-table">
+            <thead>
+              <tr>
+                <th>{t("notificationsProxyName")}</th>
+                <th>{t("notificationsProxyType")}</th>
+                <th>{t("notificationsProxyURL")}</th>
+                <th>{t("notificationsProxyActions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.notificationProxies.length > 0 ? (
+                props.notificationProxies.map((notificationProxy) => (
+                  <tr key={notificationProxy.id}>
+                    <td>{notificationProxy.name}</td>
+                    <td>{notificationProxy.proxy_type.toUpperCase()}</td>
+                    <td className="table-text-muted">{notificationProxy.url}</td>
+                    <td>
+                      <div className="action-row">
+                        <button className="secondary-button" onClick={() => props.onEditNotificationProxy(notificationProxy)} type="button">
+                          {t("notificationsProxyEdit")}
+                        </button>
+                        <button className="danger-button" onClick={() => props.onDeleteNotificationProxy(notificationProxy.id)} type="button">
+                          {t("notificationsProxyDelete")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="table-text-muted" colSpan={4}>
+                    {t("notificationsProxyEmpty")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="panel section-panel">
@@ -125,6 +250,22 @@ export default function NotificationsPage(props: NotificationsPageProps) {
                   }}
                   placeholder="https://example.com/hook"
                 />
+              </label>
+              <label className="field">
+                <span>{t("notificationsProxySelect")}</span>
+                <select
+                  value={props.webhookForm.proxyID}
+                  onChange={(event) => {
+                    props.onWebhookFormChange((current) => ({ ...current, proxyID: event.target.value }));
+                  }}
+                >
+                  <option value="">{t("notificationsNoProxy")}</option>
+                  {props.notificationProxies.map((notificationProxy) => (
+                    <option key={notificationProxy.id} value={String(notificationProxy.id)}>
+                      {notificationProxyLabel(notificationProxy.id)}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="field full-width">
                 <span>{t("notificationsHeaders")}</span>
@@ -195,6 +336,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
             <div className="card webhook-collapsed-note full-width">
               <p className="card-meta">{t("notificationsWebhookCollapsed")}</p>
               {props.webhookForm.url ? <p className="card-meta">{t("notificationsURL", { url: props.webhookForm.url })}</p> : null}
+              <p className="card-meta">{t("notificationsProxy", { value: notificationProxyLabel(Number(props.webhookForm.proxyID) || undefined) })}</p>
             </div>
           )}
         </form>
@@ -255,6 +397,22 @@ export default function NotificationsPage(props: NotificationsPageProps) {
                   }}
                 />
               </label>
+              <label className="field">
+                <span>{t("notificationsProxySelect")}</span>
+                <select
+                  value={props.telegramForm.proxyID}
+                  onChange={(event) => {
+                    props.onTelegramFormChange((current) => ({ ...current, proxyID: event.target.value }));
+                  }}
+                >
+                  <option value="">{t("notificationsNoProxy")}</option>
+                  {props.notificationProxies.map((notificationProxy) => (
+                    <option key={notificationProxy.id} value={String(notificationProxy.id)}>
+                      {notificationProxyLabel(notificationProxy.id)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="field full-width">
                 <span>{t("notificationsTelegramMessage")}</span>
                 <textarea
@@ -292,6 +450,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
           ) : (
             <div className="card telegram-collapsed-note full-width">
               <p className="card-meta">{t("notificationsTelegramCollapsed")}</p>
+              <p className="card-meta">{t("notificationsProxy", { value: notificationProxyLabel(Number(props.telegramForm.proxyID) || undefined) })}</p>
             </div>
           )}
         </form>

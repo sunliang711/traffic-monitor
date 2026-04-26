@@ -80,6 +80,54 @@ func (store *stubNotificationChannelStore) List(_ context.Context) ([]model.Noti
 	return store.channels, nil
 }
 
+type stubNotificationProxyStore struct {
+	proxies []model.NotificationProxy
+}
+
+func (store *stubNotificationProxyStore) Create(_ context.Context, notificationProxy *model.NotificationProxy) error {
+	if notificationProxy.ID == 0 {
+		notificationProxy.ID = uint(len(store.proxies) + 1)
+	}
+	store.proxies = append(store.proxies, *notificationProxy)
+	return nil
+}
+
+func (store *stubNotificationProxyStore) Update(_ context.Context, notificationProxy *model.NotificationProxy) error {
+	for index := range store.proxies {
+		if store.proxies[index].ID == notificationProxy.ID {
+			store.proxies[index] = *notificationProxy
+			return nil
+		}
+	}
+
+	return errors.New("notification proxy not found")
+}
+
+func (store *stubNotificationProxyStore) Delete(_ context.Context, proxyID uint) error {
+	for index := range store.proxies {
+		if store.proxies[index].ID == proxyID {
+			store.proxies = append(store.proxies[:index], store.proxies[index+1:]...)
+			return nil
+		}
+	}
+
+	return errors.New("notification proxy not found")
+}
+
+func (store *stubNotificationProxyStore) GetByID(_ context.Context, proxyID uint) (*model.NotificationProxy, error) {
+	for index := range store.proxies {
+		if store.proxies[index].ID == proxyID {
+			return &store.proxies[index], nil
+		}
+	}
+
+	return nil, errors.New("notification proxy not found")
+}
+
+func (store *stubNotificationProxyStore) List(_ context.Context) ([]model.NotificationProxy, error) {
+	return store.proxies, nil
+}
+
 type stubNotificationDeliveryStore struct {
 	deliveries []model.NotificationDelivery
 }
@@ -187,6 +235,10 @@ func (closer ioNopCloser) Read(p []byte) (int, error) {
 
 func (closer ioNopCloser) Close() error {
 	return nil
+}
+
+func uintPtr(value uint) *uint {
+	return &value
 }
 
 func TestAlertServiceEvaluateSamplesDeduplicates(t *testing.T) {
@@ -474,12 +526,12 @@ func TestAlertServiceListNotificationChannelsIncludesWebhookTemplates(t *testing
 				{
 					ChannelType: channelTypeWebhook,
 					Enabled:     true,
-					ConfigJSON:  `{"url":"https://example.com/hook?machine={{.machine_id}}","method":"POST","headers":{"X-Test":"{{.machine_id}}"},"body":"{\"machine_id\":\"{{.machine_id}}\"}"}`,
+					ConfigJSON:  `{"url":"https://example.com/hook?machine={{.machine_id}}","method":"POST","headers":{"X-Test":"{{.machine_id}}"},"body":"{\"machine_id\":\"{{.machine_id}}\"}","proxy_id":3}`,
 				},
 				{
 					ChannelType: channelTypeTelegram,
 					Enabled:     true,
-					ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001","message":"{{machine_name}} {{actual_human_readable}}"}`,
+					ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001","message":"{{machine_name}} {{actual_human_readable}}","proxy_id":4}`,
 				},
 			},
 		},
@@ -498,12 +550,14 @@ func TestAlertServiceListNotificationChannelsIncludesWebhookTemplates(t *testing
 	require.Equal(t, "https://example.com/hook?machine={{.machine_id}}", webhook.URL)
 	require.Equal(t, map[string]string{"X-Test": "{{.machine_id}}"}, webhook.Headers)
 	require.Equal(t, "{\"machine_id\":\"{{.machine_id}}\"}", webhook.Body)
+	require.Equal(t, uint(3), *webhook.ProxyID)
 
 	telegram := channels[1]
 	require.Equal(t, channelTypeTelegram, telegram.ChannelType)
 	require.Equal(t, "10001", telegram.ChatID)
 	require.Equal(t, "{{machine_name}} {{actual_human_readable}}", telegram.Message)
 	require.Equal(t, "1234...cdef", telegram.TokenMasked)
+	require.Equal(t, uint(4), *telegram.ProxyID)
 }
 
 func TestAlertServiceBuildWebhookTemplateDataIncludesMachineFields(t *testing.T) {
@@ -592,7 +646,12 @@ func TestAlertServiceUpsertWebhookChannelPersistsTemplates(t *testing.T) {
 	channelStore := &stubNotificationChannelStore{}
 	service := &AlertService{
 		notificationChannelStore: channelStore,
-		log:                      zerolog.Nop(),
+		notificationProxyStore: &stubNotificationProxyStore{
+			proxies: []model.NotificationProxy{
+				{Base: model.Base{ID: 9}, Name: "proxy-9", ProxyType: "http", URL: "http://127.0.0.1:7890"},
+			},
+		},
+		log: zerolog.Nop(),
 	}
 
 	err := service.UpsertWebhookChannel(context.Background(), dto.UpsertWebhookChannelReq{
@@ -602,7 +661,8 @@ func TestAlertServiceUpsertWebhookChannelPersistsTemplates(t *testing.T) {
 		Headers: map[string]string{
 			"X-Test": "{{.machine_id}}",
 		},
-		Body: "{\"machine_id\":\"{{.machine_id}}\",\"metric\":\"{{.metric_type}}\"}",
+		Body:    "{\"machine_id\":\"{{.machine_id}}\",\"metric\":\"{{.metric_type}}\"}",
+		ProxyID: uintPtr(9),
 	})
 	require.NoError(t, err)
 	require.Len(t, channelStore.channels, 1)
@@ -616,12 +676,14 @@ func TestAlertServiceUpsertWebhookChannelPersistsTemplates(t *testing.T) {
 		Method  string            `json:"method"`
 		Headers map[string]string `json:"headers"`
 		Body    string            `json:"body"`
+		ProxyID *uint             `json:"proxy_id"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(channel.ConfigJSON), &cfg))
 	require.Equal(t, "https://example.com/hook?machine={{.machine_id}}", cfg.URL)
 	require.Equal(t, http.MethodPost, cfg.Method)
 	require.Equal(t, map[string]string{"X-Test": "{{.machine_id}}"}, cfg.Headers)
 	require.Equal(t, "{\"machine_id\":\"{{.machine_id}}\",\"metric\":\"{{.metric_type}}\"}", cfg.Body)
+	require.Equal(t, uint(9), *cfg.ProxyID)
 }
 
 func TestAlertServiceUpsertTelegramChannelKeepsExistingTokenWhenMasked(t *testing.T) {
@@ -636,7 +698,12 @@ func TestAlertServiceUpsertTelegramChannelKeepsExistingTokenWhenMasked(t *testin
 	}
 	service := &AlertService{
 		notificationChannelStore: channelStore,
-		log:                      zerolog.Nop(),
+		notificationProxyStore: &stubNotificationProxyStore{
+			proxies: []model.NotificationProxy{
+				{Base: model.Base{ID: 5}, Name: "proxy-5", ProxyType: "socks", URL: "socks5://127.0.0.1:1080"},
+			},
+		},
+		log: zerolog.Nop(),
 	}
 
 	err := service.UpsertTelegramChannel(context.Background(), dto.UpsertTelegramChannelReq{
@@ -644,6 +711,7 @@ func TestAlertServiceUpsertTelegramChannelKeepsExistingTokenWhenMasked(t *testin
 		BotToken: "1234...cdef",
 		ChatID:   "20002",
 		Message:  "{{machine_name}} {{actual_human_readable}}",
+		ProxyID:  uintPtr(5),
 	})
 	require.NoError(t, err)
 	require.Len(t, channelStore.channels, 1)
@@ -652,11 +720,55 @@ func TestAlertServiceUpsertTelegramChannelKeepsExistingTokenWhenMasked(t *testin
 		BotToken string `json:"bot_token"`
 		ChatID   string `json:"chat_id"`
 		Message  string `json:"message"`
+		ProxyID  *uint  `json:"proxy_id"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(channelStore.channels[0].ConfigJSON), &cfg))
 	require.Equal(t, "1234567890abcdef", cfg.BotToken)
 	require.Equal(t, "20002", cfg.ChatID)
 	require.Equal(t, "{{machine_name}} {{actual_human_readable}}", cfg.Message)
+	require.Equal(t, uint(5), *cfg.ProxyID)
+}
+
+func TestAlertServiceUpdateNotificationProxyKeepsMaskedURL(t *testing.T) {
+	proxyStore := &stubNotificationProxyStore{
+		proxies: []model.NotificationProxy{
+			{
+				Base:      model.Base{ID: 7},
+				Name:      "old-proxy",
+				ProxyType: "http",
+				URL:       "http://user:secret@127.0.0.1:7890",
+			},
+		},
+	}
+	service := &AlertService{
+		notificationProxyStore: proxyStore,
+		log:                    zerolog.Nop(),
+	}
+
+	response, err := service.UpdateNotificationProxy(context.Background(), 7, dto.UpsertNotificationProxyReq{
+		Name:      "new-proxy",
+		ProxyType: "http",
+		URL:       "http://user:xxxxx@127.0.0.1:7890",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "new-proxy", response.Name)
+	require.Equal(t, "http://user:xxxxx@127.0.0.1:7890", response.URL)
+	require.Equal(t, "http://user:secret@127.0.0.1:7890", proxyStore.proxies[0].URL)
+}
+
+func TestParseNotificationProxyURLNormalizesProxySchemes(t *testing.T) {
+	httpProxyURL, err := parseNotificationProxyURL("http", "127.0.0.1:7890")
+	require.NoError(t, err)
+	require.Equal(t, "http", httpProxyURL.Scheme)
+	require.Equal(t, "127.0.0.1", httpProxyURL.Hostname())
+
+	socksProxyURL, err := parseNotificationProxyURL("socks", "socks://127.0.0.1:1080")
+	require.NoError(t, err)
+	require.Equal(t, "socks5", socksProxyURL.Scheme)
+	require.Equal(t, "127.0.0.1", socksProxyURL.Hostname())
+
+	_, err = parseNotificationProxyURL("socks", "http://127.0.0.1:7890")
+	require.ErrorIs(t, err, ErrInvalidNotificationProxy)
 }
 
 func TestAlertServiceTestTelegramChannelExecutesRequest(t *testing.T) {

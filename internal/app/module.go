@@ -43,6 +43,7 @@ func Run() {
 			repo.NewTrafficSampleRepo,
 			repo.NewAlertRepo,
 			repo.NewNotificationChannelRepo,
+			repo.NewNotificationProxyRepo,
 			repo.NewNotificationDeliveryRepo,
 			service.NewAuthService,
 			service.NewAlertService,
