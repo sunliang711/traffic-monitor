@@ -23,7 +23,9 @@ type ThresholdsPageProps = {
 export default function ThresholdsPage(props: ThresholdsPageProps) {
   const { t } = useI18n();
   const isMachineThresholdSelected = props.selectedMachineID !== null && props.selectedMachine !== null;
-  const activeRows = isMachineThresholdSelected ? props.machineThresholdForm : props.globalThresholdForm;
+  const activeRows = isMachineThresholdSelected
+    ? props.machineThresholdForm
+    : props.globalThresholdForm.map((row) => ({ ...row, source: row.source ?? "global" }));
   const activeDescription = isMachineThresholdSelected ? t("thresholdsMachineDescription") : t("thresholdsGlobalDescription");
   const activeSaveDisabled = isMachineThresholdSelected ? props.machineThresholdsSaved : props.globalThresholdsSaved;
   const activeSubmitHandler = isMachineThresholdSelected ? props.onSaveMachineThresholds : props.onSaveGlobalThresholds;
@@ -73,7 +75,6 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
           <ThresholdEditor
             rows={activeRows}
             onChange={activeChangeHandler}
-            showSource={isMachineThresholdSelected}
           />
         </form>
       </section>
