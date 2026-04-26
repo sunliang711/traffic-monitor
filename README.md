@@ -163,48 +163,144 @@ LOG_LEVEL=debug
 LOG_FORMAT=console
 ```
 
-## Docker 运行
+## Docker 部署
 
-1. 复制环境文件：
+项目提供了多阶段 `Dockerfile` 和 `docker-compose.yml`。Compose 会启动两个服务：
+
+- `postgres`：PostgreSQL 16，数据持久化到 `postgres_data` volume
+- `app`：`traffic-monitor` 应用，前端会在镜像构建阶段打包并嵌入 Go 二进制
+
+### 1. 准备环境变量
+
+复制环境变量模板：
 
 ```bash
 cp .env.example .env
 ```
 
-2. 修改以下关键变量：
-
-- `SESSION_SECRET`
-- `APP_MASTER_KEY`
-- `INIT_ADMIN_USERNAME`
-- `INIT_ADMIN_PASSWORD`
-
-如需覆盖日志格式，也可以设置：
-
-- `LOG_LEVEL`
-- `LOG_FORMAT`
-
-其中 `APP_MASTER_KEY` 可用下面的命令生成：
+至少需要修改以下敏感配置：
 
 ```bash
-openssl rand -base64 32
+SESSION_SECRET=$(openssl rand -hex 32)
+APP_MASTER_KEY=$(openssl rand -base64 32)
+INIT_ADMIN_USERNAME=admin
+INIT_ADMIN_PASSWORD=replace-with-strong-password
+POSTGRES_PASSWORD=replace-with-strong-postgres-password
 ```
 
-`SESSION_SECRET` 可用下面的命令生成：
+配置说明：
+
+| 变量名 | 必填 | 敏感 | 默认值 | 说明 |
+|--------|:---:|:---:|--------|------|
+| `APP_ENV` | 否 | 否 | `production` | 应用运行环境 |
+| `APP_PORT` | 否 | 否 | `8080` | 宿主机暴露的 Web 端口 |
+| `POSTGRES_PORT` | 否 | 否 | `5432` | 宿主机暴露的 PostgreSQL 端口 |
+| `POSTGRES_DB` | 否 | 否 | `traffic_monitor` | PostgreSQL 数据库名 |
+| `POSTGRES_USER` | 否 | 否 | `traffic_monitor` | PostgreSQL 用户名 |
+| `POSTGRES_PASSWORD` | 是 | 是 | `traffic_monitor` | PostgreSQL 密码，生产环境必须修改 |
+| `SESSION_SECRET` | 是 | 是 | 无 | Session 签名密钥，建议使用 `openssl rand -hex 32` 生成 |
+| `APP_MASTER_KEY` | 是 | 是 | 无 | 敏感数据加密主密钥，必须是 base64 编码后的 32 字节密钥 |
+| `INIT_ADMIN_USERNAME` | 首次部署需要 | 否 | `admin` | 首次启动时初始化管理员用户名 |
+| `INIT_ADMIN_PASSWORD` | 首次部署需要 | 是 | 无 | 首次启动时初始化管理员密码 |
+| `LOG_LEVEL` | 否 | 否 | `info` | 日志级别，例如 `debug` / `info` / `warn` / `error` |
+| `LOG_FORMAT` | 否 | 否 | `json` | 日志格式，支持 `json` / `console` |
+| `COLLECTOR_INTERVAL` | 否 | 否 | `300s` | 定时采集周期 |
+
+说明：
+
+- `APP_MASTER_KEY` 一旦用于加密 SSH Key 等敏感数据，后续不能随意更换，否则已有密文无法解密。
+- `INIT_ADMIN_USERNAME` 和 `INIT_ADMIN_PASSWORD` 必须同时配置或同时留空。
+- `POSTGRES_DSN` 在 `docker-compose.yml` 中会根据 PostgreSQL 配置自动拼接，通常不需要在 `.env` 中手动配置。
+- 如果只允许本机访问数据库，可以设置 `POSTGRES_PORT=127.0.0.1:5432`，或移除 `postgres` 服务的 `ports` 配置。
+
+### 2. 构建并启动
+
+首次部署或代码更新后执行：
 
 ```bash
-openssl rand -hex 32
+docker compose up -d --build
 ```
 
-3. 启动服务：
+查看服务状态：
 
 ```bash
-docker compose up --build
+docker compose ps
 ```
 
-启动后：
+查看应用日志：
 
-- 应用地址：`http://127.0.0.1:8080`
+```bash
+docker compose logs -f app
+```
+
+启动后默认访问：
+
+- 管理后台：`http://127.0.0.1:8080`
+- 健康检查：`http://127.0.0.1:8080/healthz`
 - PostgreSQL：`127.0.0.1:5432`
+
+### 3. 常用运维命令
+
+重启应用：
+
+```bash
+docker compose restart app
+```
+
+停止服务但保留数据卷：
+
+```bash
+docker compose down
+```
+
+停止服务并删除 PostgreSQL 数据卷：
+
+```bash
+docker compose down -v
+```
+
+更新部署：
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+### 4. 使用已发布镜像
+
+如果使用 GitHub tag 发布出来的 Docker Hub 镜像，可以把 `docker-compose.yml` 中 `app` 服务的构建配置：
+
+```yaml
+build:
+  context: .
+  dockerfile: Dockerfile
+```
+
+替换为：
+
+```yaml
+image: sunliang711/traffic-monitor:v1.2.3
+```
+
+然后启动：
+
+```bash
+docker compose up -d
+```
+
+其中 `v1.2.3` 替换为实际发布的 tag。
+
+### 5. 部署后验证
+
+```bash
+curl http://127.0.0.1:8080/healthz
+```
+
+正常响应示例：
+
+```json
+{"code":200,"data":{"app_name":"traffic-monitor","db":"up","env":"production","status":"ok"},"message":"success"}
+```
 
 ## 关键说明
 
