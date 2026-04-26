@@ -145,6 +145,9 @@ export function tryParseHeaders(value: string): Record<string, string> {
   }
 }
 
+export const defaultTelegramMessageTemplate =
+  "machine={{machine_name}} host={{machine_host}} period={{period_type}} metric={{metric_type}} actual={{actual_human_readable}} threshold={{threshold_human_readable}} bucket={{bucket_time_rfc3339}}";
+
 export function renderWebhookPreviewTemplate(value: string): string {
   return [
     ["{{machine_id}}", "1"],

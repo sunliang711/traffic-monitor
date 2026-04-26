@@ -479,7 +479,7 @@ func TestAlertServiceListNotificationChannelsIncludesWebhookTemplates(t *testing
 				{
 					ChannelType: channelTypeTelegram,
 					Enabled:     true,
-					ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001"}`,
+					ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001","message":"{{machine_name}} {{actual_human_readable}}"}`,
 				},
 			},
 		},
@@ -502,7 +502,8 @@ func TestAlertServiceListNotificationChannelsIncludesWebhookTemplates(t *testing
 	telegram := channels[1]
 	require.Equal(t, channelTypeTelegram, telegram.ChannelType)
 	require.Equal(t, "10001", telegram.ChatID)
-	require.NotEmpty(t, telegram.TokenMasked)
+	require.Equal(t, "{{machine_name}} {{actual_human_readable}}", telegram.Message)
+	require.Equal(t, "1234...cdef", telegram.TokenMasked)
 }
 
 func TestAlertServiceBuildWebhookTemplateDataIncludesMachineFields(t *testing.T) {
@@ -621,6 +622,90 @@ func TestAlertServiceUpsertWebhookChannelPersistsTemplates(t *testing.T) {
 	require.Equal(t, http.MethodPost, cfg.Method)
 	require.Equal(t, map[string]string{"X-Test": "{{.machine_id}}"}, cfg.Headers)
 	require.Equal(t, "{\"machine_id\":\"{{.machine_id}}\",\"metric\":\"{{.metric_type}}\"}", cfg.Body)
+}
+
+func TestAlertServiceUpsertTelegramChannelKeepsExistingTokenWhenMasked(t *testing.T) {
+	channelStore := &stubNotificationChannelStore{
+		channels: []model.NotificationChannel{
+			{
+				ChannelType: channelTypeTelegram,
+				Enabled:     true,
+				ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001"}`,
+			},
+		},
+	}
+	service := &AlertService{
+		notificationChannelStore: channelStore,
+		log:                      zerolog.Nop(),
+	}
+
+	err := service.UpsertTelegramChannel(context.Background(), dto.UpsertTelegramChannelReq{
+		Enabled:  true,
+		BotToken: "1234...cdef",
+		ChatID:   "20002",
+		Message:  "{{machine_name}} {{actual_human_readable}}",
+	})
+	require.NoError(t, err)
+	require.Len(t, channelStore.channels, 1)
+
+	var cfg struct {
+		BotToken string `json:"bot_token"`
+		ChatID   string `json:"chat_id"`
+		Message  string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(channelStore.channels[0].ConfigJSON), &cfg))
+	require.Equal(t, "1234567890abcdef", cfg.BotToken)
+	require.Equal(t, "20002", cfg.ChatID)
+	require.Equal(t, "{{machine_name}} {{actual_human_readable}}", cfg.Message)
+}
+
+func TestAlertServiceTestTelegramChannelExecutesRequest(t *testing.T) {
+	channelStore := &stubNotificationChannelStore{
+		channels: []model.NotificationChannel{
+			{
+				ChannelType: channelTypeTelegram,
+				Enabled:     true,
+				ConfigJSON:  `{"bot_token":"1234567890abcdef","chat_id":"10001","message":"old message"}`,
+			},
+		},
+	}
+	httpClient := &stubHTTPClient{
+		statusCode: http.StatusOK,
+		body:       `{"ok":true}`,
+	}
+	service := &AlertService{
+		notificationChannelStore: channelStore,
+		httpClient:               httpClient,
+		machineStore: &stubAlertMachineStore{
+			machines: map[uint]model.Machine{
+				1: {
+					Name: "prod-api-01",
+					Host: "10.2.1.107",
+				},
+			},
+		},
+		log: zerolog.Nop(),
+	}
+
+	response, err := service.TestTelegramChannel(context.Background(), dto.UpsertTelegramChannelReq{
+		BotToken: "1234...cdef",
+		ChatID:   "20002",
+		Message:  "machine={{machine_name}} host={{machine_host}} actual={{actual_human_readable}} key={{alert_key}}",
+	})
+	require.NoError(t, err)
+	require.Len(t, httpClient.requests, 1)
+
+	req := httpClient.requests[0]
+	require.Equal(t, http.MethodPost, req.Method)
+	require.Equal(t, "https://api.telegram.org/bot1234567890abcdef/sendMessage", req.URL.String())
+	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"chat_id":"20002","text":"machine=prod-api-01 host=10.2.1.107 actual=1.500 GB key=test:telegram:alert"}`, string(body))
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Equal(t, `{"ok":true}`, response.Body)
+	require.Equal(t, "machine=prod-api-01 host=10.2.1.107 actual=1.500 GB key=test:telegram:alert", response.RenderedMessage)
 }
 
 func TestAlertServiceTestWebhookChannelExecutesRequest(t *testing.T) {

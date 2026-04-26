@@ -26,6 +26,7 @@ const (
 	alertNotifyStatusSkipped = "skipped"
 	channelTypeWebhook       = "webhook"
 	channelTypeTelegram      = "telegram"
+	defaultTelegramMessage   = "machine={{machine_name}} host={{machine_host}} period={{period_type}} metric={{metric_type}} actual={{actual_human_readable}} threshold={{threshold_human_readable}} bucket={{bucket_time_rfc3339}}"
 )
 
 var (
@@ -58,6 +59,12 @@ type ThresholdRuleProvider interface {
 
 type NotificationHTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
+}
+
+type telegramChannelConfig struct {
+	BotToken string `json:"bot_token"`
+	ChatID   string `json:"chat_id"`
+	Message  string `json:"message"`
 }
 
 type AlertService struct {
@@ -240,35 +247,17 @@ func (service *AlertService) sendWebhook(ctx context.Context, configJSON string,
 }
 
 func (service *AlertService) sendTelegram(ctx context.Context, configJSON string, alert *model.Alert) (string, error) {
-	var cfg struct {
-		BotToken string `json:"bot_token"`
-		ChatID   string `json:"chat_id"`
-	}
+	var cfg telegramChannelConfig
 
 	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
 		return "", fmt.Errorf("decode telegram config: %w", err)
 	}
 
-	if strings.TrimSpace(cfg.BotToken) == "" || strings.TrimSpace(cfg.ChatID) == "" {
-		return "", ErrInvalidNotificationChannel
-	}
-
-	bodyPayload, err := json.Marshal(map[string]string{
-		"chat_id": cfg.ChatID,
-		"text": fmt.Sprintf("machine=%d period=%s metric=%s actual=%.3fMB threshold=%.3fMB bucket=%s",
-			alert.MachineID, alert.PeriodType, alert.MetricType, alert.ActualMB, alert.ThresholdMB, alert.BucketTime.Format(time.RFC3339)),
-	})
+	req, _, err := service.renderTelegramRequest(ctx, cfg, alert)
 	if err != nil {
-		return "", fmt.Errorf("marshal telegram payload: %w", err)
+		return "", err
 	}
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", cfg.BotToken)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyPayload))
-	if err != nil {
-		return "", fmt.Errorf("build telegram request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := service.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("send telegram request: %w", err)
@@ -365,16 +354,18 @@ func (service *AlertService) ListNotificationChannels(ctx context.Context) ([]dt
 				Body:        cfg.Body,
 			})
 		case channelTypeTelegram:
-			var cfg struct {
-				BotToken string `json:"bot_token"`
-				ChatID   string `json:"chat_id"`
-			}
+			var cfg telegramChannelConfig
 			_ = json.Unmarshal([]byte(channel.ConfigJSON), &cfg)
+			message := strings.TrimSpace(cfg.Message)
+			if message == "" {
+				message = defaultTelegramMessage
+			}
 			result = append(result, dto.NotificationChannelResp{
 				ChannelType: channel.ChannelType,
 				Enabled:     channel.Enabled,
 				Configured:  strings.TrimSpace(cfg.BotToken) != "" && strings.TrimSpace(cfg.ChatID) != "",
 				ChatID:      cfg.ChatID,
+				Message:     message,
 				TokenMasked: maskToken(cfg.BotToken),
 			})
 		}
@@ -489,10 +480,12 @@ func (service *AlertService) TestWebhookChannel(ctx context.Context, req dto.Ups
 }
 
 func (service *AlertService) UpsertTelegramChannel(ctx context.Context, req dto.UpsertTelegramChannelReq) error {
-	configJSON, err := json.Marshal(map[string]string{
-		"bot_token": strings.TrimSpace(req.BotToken),
-		"chat_id":   strings.TrimSpace(req.ChatID),
-	})
+	cfg, err := service.buildTelegramChannelConfig(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	configJSON, err := json.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshal telegram channel config: %w", err)
 	}
@@ -508,6 +501,124 @@ func (service *AlertService) UpsertTelegramChannel(ctx context.Context, req dto.
 	}
 
 	return nil
+}
+
+func (service *AlertService) TestTelegramChannel(ctx context.Context, req dto.UpsertTelegramChannelReq) (dto.TestTelegramChannelResp, error) {
+	cfg, err := service.buildTelegramChannelConfig(ctx, req)
+	if err != nil {
+		return dto.TestTelegramChannelResp{}, err
+	}
+
+	alert := &model.Alert{
+		MachineID:    1,
+		PeriodType:   thresholdPeriodHourly,
+		MetricType:   thresholdMetricTotal,
+		BucketTime:   time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
+		ThresholdMB:  1024,
+		ActualMB:     1536,
+		AlertKey:     "test:telegram:alert",
+		NotifyStatus: alertNotifyStatusPending,
+	}
+
+	httpRequest, renderedMessage, err := service.renderTelegramRequest(ctx, cfg, alert)
+	if err != nil {
+		return dto.TestTelegramChannelResp{}, err
+	}
+
+	resp, err := service.httpClient.Do(httpRequest)
+	if err != nil {
+		return dto.TestTelegramChannelResp{}, fmt.Errorf("send telegram request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	if err != nil {
+		return dto.TestTelegramChannelResp{}, fmt.Errorf("read telegram response: %w", err)
+	}
+
+	result := dto.TestTelegramChannelResp{
+		StatusCode:      resp.StatusCode,
+		Body:            string(responseBody),
+		RenderedMessage: renderedMessage,
+	}
+	if resp.StatusCode >= 300 {
+		return dto.TestTelegramChannelResp{}, fmt.Errorf("telegram status %d: %s", resp.StatusCode, string(responseBody))
+	}
+
+	return result, nil
+}
+
+func (service *AlertService) buildTelegramChannelConfig(ctx context.Context, req dto.UpsertTelegramChannelReq) (telegramChannelConfig, error) {
+	botToken := strings.TrimSpace(req.BotToken)
+	chatID := strings.TrimSpace(req.ChatID)
+	message := strings.TrimSpace(req.Message)
+	if message == "" {
+		message = defaultTelegramMessage
+	}
+
+	if service.notificationChannelStore != nil {
+		channels, err := service.notificationChannelStore.List(ctx)
+		if err != nil {
+			return telegramChannelConfig{}, fmt.Errorf("list notification channels: %w", err)
+		}
+
+		for _, channel := range channels {
+			if channel.ChannelType != channelTypeTelegram {
+				continue
+			}
+
+			var cfg telegramChannelConfig
+			_ = json.Unmarshal([]byte(channel.ConfigJSON), &cfg)
+			existingBotToken := strings.TrimSpace(cfg.BotToken)
+			if existingBotToken != "" && (botToken == "" || botToken == maskToken(existingBotToken)) {
+				botToken = existingBotToken
+			}
+			break
+		}
+	}
+
+	return telegramChannelConfig{
+		BotToken: botToken,
+		ChatID:   chatID,
+		Message:  message,
+	}, nil
+}
+
+func (service *AlertService) renderTelegramRequest(ctx context.Context, cfg telegramChannelConfig, alert *model.Alert) (*http.Request, string, error) {
+	botToken := strings.TrimSpace(cfg.BotToken)
+	chatID := strings.TrimSpace(cfg.ChatID)
+	if botToken == "" || chatID == "" {
+		return nil, "", ErrInvalidNotificationChannel
+	}
+
+	messageTemplate := strings.TrimSpace(cfg.Message)
+	if messageTemplate == "" {
+		messageTemplate = defaultTelegramMessage
+	}
+
+	renderedMessage, err := renderWebhookTemplate(messageTemplate, service.buildWebhookTemplateData(ctx, alert))
+	if err != nil {
+		return nil, "", fmt.Errorf("render telegram message template: %w", err)
+	}
+
+	bodyPayload, err := json.Marshal(map[string]string{
+		"chat_id": chatID,
+		"text":    renderedMessage,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal telegram payload: %w", err)
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyPayload))
+	if err != nil {
+		return nil, "", fmt.Errorf("build telegram request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	return req, renderedMessage, nil
 }
 
 func buildAlertKey(machineID uint, periodType string, metricType string, bucketTime time.Time) string {

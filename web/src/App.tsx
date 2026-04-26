@@ -11,11 +11,13 @@ import type {
   SSHKeyImportState,
   TabKey,
   TelegramFormState,
+  TelegramPreviewState,
   ThresholdFormRow,
   WebhookFormState,
   WebhookPreviewState,
 } from "./lib/app-types";
 import {
+  defaultTelegramMessageTemplate,
   emptyThresholdRows,
   safeParseHeaders,
   tabKeyFromPath,
@@ -46,6 +48,7 @@ import type {
   Machine,
   NotificationChannel,
   SSHKey,
+  TelegramTestResponse,
   ThresholdRule,
   TrafficSample,
   TrafficSampleList,
@@ -161,11 +164,13 @@ function App() {
     enabled: false,
     botToken: "",
     chatID: "",
+    messageText: defaultTelegramMessageTemplate,
   });
   const [connectionResults, setConnectionResults] = useState<Record<number, ConnectionTestResponse>>({});
   const [testingMachineIDs, setTestingMachineIDs] = useState<Record<number, boolean>>({});
   const [collectResults, setCollectResults] = useState<CollectNowResponse["results"]>([]);
   const [webhookPreview, setWebhookPreview] = useState<WebhookPreviewState | null>(null);
+  const [telegramPreview, setTelegramPreview] = useState<TelegramPreviewState | null>(null);
   const [globalThresholdsSaved, setGlobalThresholdsSaved] = useState(true);
   const [machineThresholdsSaved, setMachineThresholdsSaved] = useState(true);
   const [webhookSaved, setWebhookSaved] = useState(true);
@@ -385,7 +390,8 @@ function App() {
     setTelegramForm({
       enabled: telegram?.enabled ?? false,
       chatID: telegram?.chat_id ?? "",
-      botToken: "",
+      botToken: telegram?.token_masked ?? "",
+      messageText: telegram?.message ?? defaultTelegramMessageTemplate,
     });
     setTelegramSaved(true);
   }
@@ -1013,18 +1019,37 @@ function App() {
   async function handleSaveTelegram(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitAction(async () => {
-      await put<null, { enabled: boolean; bot_token: string; chat_id: string }>(
+      await put<null, { enabled: boolean; bot_token: string; chat_id: string; message: string }>(
         "/api/v1/notification-channels/telegram",
         {
           enabled: telegramForm.enabled,
           bot_token: telegramForm.botToken,
           chat_id: telegramForm.chatID,
+          message: telegramForm.messageText,
         },
       );
       setTelegramForm((current) => ({ ...current, botToken: "" }));
       await loadProtectedData();
       setTelegramSaved(true);
       setToast(t("telegramSaveSuccess"));
+    });
+  }
+
+  async function handleTestTelegram() {
+    await submitAction(async () => {
+      const response = await post<
+        TelegramTestResponse,
+        { bot_token: string; chat_id: string; message: string }
+      >("/api/v1/notification-channels/telegram/test", {
+        bot_token: telegramForm.botToken,
+        chat_id: telegramForm.chatID,
+        message: telegramForm.messageText,
+      });
+
+      setTelegramPreview({
+        messageText: response.rendered_message ?? renderWebhookPreviewTemplate(telegramForm.messageText),
+      });
+      setToast(response.body ? t("telegramTestSuccessWithBody", { body: response.body }) : t("telegramTestSuccess"));
     });
   }
 
@@ -1400,10 +1425,12 @@ function App() {
                 webhookPreview={webhookPreview}
                 telegramForm={telegramForm}
                 telegramSaved={telegramSaved}
+                telegramPreview={telegramPreview}
                 onWebhookFormChange={updateWebhookForm}
                 onTelegramFormChange={updateTelegramForm}
                 onSaveWebhook={handleSaveWebhook}
                 onTestWebhook={() => void handleTestWebhook()}
+                onTestTelegram={() => void handleTestTelegram()}
                 onSaveTelegram={handleSaveTelegram}
               />
             }

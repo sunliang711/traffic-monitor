@@ -47,6 +47,7 @@ export type NotificationChannel = {
   headers?: Record<string, string>;
   body?: string;
   chat_id?: string;
+  message?: string;
   token_masked?: string;
 };
 
@@ -110,6 +111,12 @@ export type WebhookTestResponse = {
   rendered_url?: string;
   rendered_headers?: Record<string, string>;
   rendered_body?: string;
+};
+
+export type TelegramTestResponse = {
+  status_code: number;
+  body: string;
+  rendered_message?: string;
 };
 
 export type CleanupHistoryResponse = {

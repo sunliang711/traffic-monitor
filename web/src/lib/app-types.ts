@@ -55,10 +55,15 @@ export type WebhookPreviewState = {
   bodyText: string;
 };
 
+export type TelegramPreviewState = {
+  messageText: string;
+};
+
 export type TelegramFormState = {
   enabled: boolean;
   botToken: string;
   chatID: string;
+  messageText: string;
 };
 
 export type ThresholdRulePayload = {

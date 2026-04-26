@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { NotificationChannel } from "../types";
-import type { TelegramFormState, WebhookFormState, WebhookPreviewState } from "../lib/app-types";
+import type { TelegramFormState, TelegramPreviewState, WebhookFormState, WebhookPreviewState } from "../lib/app-types";
 import { useI18n } from "../lib/i18n";
 
 type NotificationsPageProps = {
@@ -12,17 +12,19 @@ type NotificationsPageProps = {
   webhookPreview: WebhookPreviewState | null;
   telegramForm: TelegramFormState;
   telegramSaved: boolean;
+  telegramPreview: TelegramPreviewState | null;
   onWebhookFormChange: (updater: (current: WebhookFormState) => WebhookFormState) => void;
   onTelegramFormChange: (updater: (current: TelegramFormState) => TelegramFormState) => void;
   onSaveWebhook: (event: FormEvent<HTMLFormElement>) => void;
   onTestWebhook: () => void;
+  onTestTelegram: () => void;
   onSaveTelegram: (event: FormEvent<HTMLFormElement>) => void;
 };
 
 export default function NotificationsPage(props: NotificationsPageProps) {
   const { t } = useI18n();
   const [isWebhookConfigOpen, setWebhookConfigOpen] = useState(false);
-  const webhookVariables = [
+  const notificationVariables = [
     "{{machine_id}}",
     "{{machine_name}}",
     "{{machine_host}}",
@@ -170,7 +172,7 @@ export default function NotificationsPage(props: NotificationsPageProps) {
                   {t("notificationsVariablesDesc")}
                 </p>
                 <div className="variable-chip-list">
-                  {webhookVariables.map((variable) => (
+                  {notificationVariables.map((variable) => (
                     <code key={variable}>{variable}</code>
                   ))}
                 </div>
@@ -206,14 +208,19 @@ export default function NotificationsPage(props: NotificationsPageProps) {
             </div>
             <p className="section-description">{t("notificationsTelegramDescription")}</p>
           </div>
-          <button
-            className="primary-button"
-            disabled={props.busy || props.telegramSaved}
-            form="telegram-form"
-            type="submit"
-          >
-            {t("notificationsSaveTelegram")}
-          </button>
+          <div className="action-row">
+            <button className="secondary-button" disabled={props.busy} onClick={props.onTestTelegram} type="button">
+              {t("notificationsTestTelegram")}
+            </button>
+            <button
+              className="primary-button"
+              disabled={props.busy || props.telegramSaved}
+              form="telegram-form"
+              type="submit"
+            >
+              {t("notificationsSaveTelegram")}
+            </button>
+          </div>
         </div>
         <form id="telegram-form" className="form-grid telegram-form-grid" onSubmit={props.onSaveTelegram}>
           <label className="field checkbox-field full-width">
@@ -248,6 +255,39 @@ export default function NotificationsPage(props: NotificationsPageProps) {
                   }}
                 />
               </label>
+              <label className="field full-width">
+                <span>{t("notificationsTelegramMessage")}</span>
+                <textarea
+                  rows={5}
+                  value={props.telegramForm.messageText}
+                  onChange={(event) => {
+                    props.onTelegramFormChange((current) => ({ ...current, messageText: event.target.value }));
+                  }}
+                  placeholder="machine={{machine_name}} actual={{actual_human_readable}}"
+                />
+              </label>
+              <div className="card">
+                <div className="card-header">
+                  <strong>{t("notificationsVariablesTitle")}</strong>
+                </div>
+                <p className="card-meta">
+                  {t("notificationsTelegramVariablesDesc")}
+                </p>
+                <div className="variable-chip-list">
+                  {notificationVariables.map((variable) => (
+                    <code key={variable}>{variable}</code>
+                  ))}
+                </div>
+              </div>
+              {props.telegramPreview ? (
+                <div className="card">
+                  <div className="card-header">
+                    <strong>{t("notificationsPreviewTitle")}</strong>
+                  </div>
+                  <p className="card-meta">{t("notificationsPreviewMessage")}</p>
+                  <pre className="code-block">{props.telegramPreview.messageText || "-"}</pre>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="card telegram-collapsed-note full-width">

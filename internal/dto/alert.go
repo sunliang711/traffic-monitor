@@ -39,6 +39,7 @@ type UpsertTelegramChannelReq struct {
 	Enabled  bool   `json:"enabled"`
 	BotToken string `json:"bot_token"`
 	ChatID   string `json:"chat_id"`
+	Message  string `json:"message"`
 }
 
 type NotificationChannelResp struct {
@@ -50,6 +51,7 @@ type NotificationChannelResp struct {
 	Headers     map[string]string `json:"headers,omitempty"`
 	Body        string            `json:"body,omitempty"`
 	ChatID      string            `json:"chat_id,omitempty"`
+	Message     string            `json:"message,omitempty"`
 	TokenMasked string            `json:"token_masked,omitempty"`
 }
 
@@ -66,4 +68,10 @@ type TestWebhookChannelResp struct {
 	RenderedURL     string            `json:"rendered_url"`
 	RenderedHeaders map[string]string `json:"rendered_headers"`
 	RenderedBody    string            `json:"rendered_body"`
+}
+
+type TestTelegramChannelResp struct {
+	StatusCode      int    `json:"status_code"`
+	Body            string `json:"body"`
+	RenderedMessage string `json:"rendered_message"`
 }

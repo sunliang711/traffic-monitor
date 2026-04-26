@@ -29,6 +29,7 @@ func (handler *AlertHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup)
 	authenticatedGroup.PUT("/notification-channels/webhook", handler.UpsertWebhookChannel)
 	authenticatedGroup.POST("/notification-channels/webhook/test", handler.TestWebhookChannel)
 	authenticatedGroup.PUT("/notification-channels/telegram", handler.UpsertTelegramChannel)
+	authenticatedGroup.POST("/notification-channels/telegram/test", handler.TestTelegramChannel)
 }
 
 func (handler *AlertHandler) ListAlerts(ctx *gin.Context) {
@@ -121,6 +122,22 @@ func (handler *AlertHandler) UpsertTelegramChannel(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, dto.Response{Code: http.StatusOK, Data: nil, Message: "success"})
 }
 
+func (handler *AlertHandler) TestTelegramChannel(ctx *gin.Context) {
+	var req dto.UpsertTelegramChannelReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		badRequest(ctx, "invalid request")
+		return
+	}
+
+	response, err := handler.alertService.TestTelegramChannel(ctx.Request.Context(), req)
+	if err != nil {
+		handleTelegramTestError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dto.Response{Code: http.StatusOK, Data: response, Message: "success"})
+}
+
 func parseListAlertsQuery(ctx *gin.Context) (dto.ListAlertsQuery, error) {
 	var query dto.ListAlertsQuery
 	if rawMachineID := ctx.Query("machine_id"); rawMachineID != "" {
@@ -181,6 +198,23 @@ func handleWebhookTestError(ctx *gin.Context, err error) {
 			Code:    http.StatusBadRequest,
 			Data:    nil,
 			Message: fmt.Sprintf("webhook test failed: %v", err),
+		})
+	}
+}
+
+func handleTelegramTestError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidNotificationChannel):
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid notification channel config",
+		})
+	default:
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: fmt.Sprintf("telegram test failed: %v", err),
 		})
 	}
 }
