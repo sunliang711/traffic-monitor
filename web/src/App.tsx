@@ -109,6 +109,100 @@ function AppIcon() {
   );
 }
 
+function TabIcon({ tabKey }: { tabKey: TabKey }) {
+  let icon;
+
+  switch (tabKey) {
+    case "overview":
+      icon = (
+        <>
+          <rect x="4" y="4" width="7" height="7" rx="1.5" />
+          <rect x="13" y="4" width="7" height="7" rx="1.5" />
+          <rect x="4" y="13" width="7" height="7" rx="1.5" />
+          <rect x="13" y="13" width="7" height="7" rx="1.5" />
+        </>
+      );
+      break;
+    case "machines":
+      icon = (
+        <>
+          <rect x="4" y="5" width="16" height="6" rx="2" />
+          <rect x="4" y="13" width="16" height="6" rx="2" />
+          <path d="M8 8H8.01" />
+          <path d="M8 16H8.01" />
+        </>
+      );
+      break;
+    case "sshKeys":
+      icon = (
+        <>
+          <circle cx="8" cy="12" r="3.5" />
+          <path d="M11.5 12H20" />
+          <path d="M17 12V15" />
+          <path d="M14.5 12V14" />
+        </>
+      );
+      break;
+    case "samples":
+      icon = (
+        <>
+          <path d="M4 16L8 11L12 14L20 6" />
+          <path d="M4 20H20" />
+        </>
+      );
+      break;
+    case "thresholds":
+      icon = (
+        <>
+          <path d="M5 7H19" />
+          <path d="M5 12H19" />
+          <path d="M5 17H19" />
+          <circle cx="9" cy="7" r="1.8" />
+          <circle cx="15" cy="12" r="1.8" />
+          <circle cx="11" cy="17" r="1.8" />
+        </>
+      );
+      break;
+    case "notifications":
+      icon = (
+        <>
+          <path d="M18 10A6 6 0 0 0 6 10C6 17 3.5 18 3.5 18H20.5C20.5 18 18 17 18 10" />
+          <path d="M10 21H14" />
+        </>
+      );
+      break;
+    case "alerts":
+      icon = (
+        <>
+          <path d="M12 4L21 20H3L12 4Z" />
+          <path d="M12 10V14" />
+          <path d="M12 17H12.01" />
+        </>
+      );
+      break;
+    default:
+      icon = null;
+  }
+
+  return (
+    <span className="tab-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        {icon}
+      </svg>
+    </span>
+  );
+}
+
+function SidebarCollapseIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <span className="sidebar-toggle-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d={collapsed ? "M9 6L15 12L9 18" : "M15 6L9 12L15 18"} />
+      </svg>
+    </span>
+  );
+}
+
 type ProtectedDataLoadOptions = {
   samplesPage?: number;
   sampleMachineID?: number | null;
@@ -117,6 +211,10 @@ type ProtectedDataLoadOptions = {
   alertsPage?: number;
   alertMachineID?: number | null;
   alertsPageSize?: number;
+};
+
+type LoadSamplesPageOptions = {
+  silent?: boolean;
 };
 
 function App() {
@@ -132,6 +230,7 @@ function App() {
   const [isActionMenuOpen, setActionMenuOpen] = useState(false);
   const [isLanguageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [backupModalMode, setBackupModalMode] = useState<"export" | "import" | null>(null);
   const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
   const [backupExportForm, setBackupExportForm] = useState(emptyBackupExportForm);
@@ -304,9 +403,11 @@ function App() {
     });
   }
 
-  async function loadSamplesPage(page = samplesPage, machineID = selectedSampleMachineID, pageSize = samplesPageSize, periodType = selectedSamplePeriodType) {
-    setBusy(true);
-    setError("");
+  async function loadSamplesPage(page = samplesPage, machineID = selectedSampleMachineID, pageSize = samplesPageSize, periodType = selectedSamplePeriodType, options: LoadSamplesPageOptions = {}) {
+    if (!options.silent) {
+      setBusy(true);
+      setError("");
+    }
     try {
       const response = await get<TrafficSampleList>(trafficSamplesPath(page, machineID, pageSize, periodType));
       setSamples(response.items);
@@ -314,7 +415,9 @@ function App() {
     } catch (loadError) {
       setError(toErrorMessage(loadError, language));
     } finally {
-      setBusy(false);
+      if (!options.silent) {
+        setBusy(false);
+      }
     }
   }
 
@@ -1414,16 +1517,28 @@ function App() {
   }
 
   return (
-    <main className="console-shell">
+    <main className={`console-shell${isSidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <section className="brand-panel">
-          <NavLink className="brand-copy brand-home-link" to="/overview">
-            <div className="app-brand">
-              <AppIcon />
-              <p className="eyebrow">traffic-monitor</p>
-            </div>
-            <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
-          </NavLink>
+          <div className="brand-header">
+            <NavLink className="brand-copy brand-home-link" to="/overview" title={t("sidebarTitle")}>
+              <div className="app-brand">
+                <AppIcon />
+                <p className="eyebrow">traffic-monitor</p>
+              </div>
+              <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
+            </NavLink>
+            <button
+              className="sidebar-toggle"
+              type="button"
+              title={isSidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
+              aria-label={isSidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
+              aria-pressed={isSidebarCollapsed}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            >
+              <SidebarCollapseIcon collapsed={isSidebarCollapsed} />
+            </button>
+          </div>
           <div className="brand-metrics">
             <div>
               <span>{t("overviewEnabledMachines")}</span>
@@ -1442,8 +1557,10 @@ function App() {
               key={tab.key}
               to={tab.path}
               className={({ isActive }) => `tab-link${isActive ? " active" : ""}`}
+              title={tabTitle(tab.key, language)}
             >
-              {tabTitle(tab.key, language)}
+              <TabIcon tabKey={tab.key} />
+              <span className="tab-label">{tabTitle(tab.key, language)}</span>
             </NavLink>
           ))}
         </nav>
@@ -1665,6 +1782,7 @@ function App() {
                 onPageChange={(page) => void handleSamplesPageChange(page)}
                 onPageSizeChange={(pageSize) => void handleSamplesPageSizeChange(pageSize)}
                 onRefresh={() => void loadSamplesPage()}
+                onAutoRefresh={() => void loadSamplesPage(samplesPage, selectedSampleMachineID, samplesPageSize, selectedSamplePeriodType, { silent: true })}
                 onCollectAllMachines={() => void handleCollectNow()}
                 onCollectCurrentMachine={(machineID) => void handleCollectNow(machineID)}
               />

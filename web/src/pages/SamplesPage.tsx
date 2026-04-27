@@ -65,6 +65,7 @@ type SamplesPageProps = {
   onPageChange: (page: number) => void | Promise<void>;
   onPageSizeChange: (pageSize: number) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
+  onAutoRefresh: () => void | Promise<void>;
   onCollectAllMachines: () => void;
   onCollectCurrentMachine: (machineID: number) => void;
 };
@@ -82,7 +83,8 @@ function RefreshIcon() {
 
 export default function SamplesPage(props: SamplesPageProps) {
   const { language, t } = useI18n();
-  const refreshCallback = useRef(props.onRefresh);
+  const autoRefreshCallback = useRef(props.onAutoRefresh);
+  const autoRefreshInFlight = useRef(false);
   const busyRef = useRef(props.busy);
   const autoRefreshWrapperRef = useRef<HTMLDivElement | null>(null);
   const [isAutoRefreshMenuOpen, setAutoRefreshMenuOpen] = useState(false);
@@ -93,8 +95,8 @@ export default function SamplesPage(props: SamplesPageProps) {
   const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
 
   useEffect(() => {
-    refreshCallback.current = props.onRefresh;
-  }, [props.onRefresh]);
+    autoRefreshCallback.current = props.onAutoRefresh;
+  }, [props.onAutoRefresh]);
 
   useEffect(() => {
     busyRef.current = props.busy;
@@ -131,8 +133,11 @@ export default function SamplesPage(props: SamplesPageProps) {
     }
 
     const timer = window.setInterval(() => {
-      if (!busyRef.current) {
-        void refreshCallback.current();
+      if (!busyRef.current && !autoRefreshInFlight.current) {
+        autoRefreshInFlight.current = true;
+        void Promise.resolve(autoRefreshCallback.current()).finally(() => {
+          autoRefreshInFlight.current = false;
+        });
       }
     }, autoRefreshInterval * 1000);
 
