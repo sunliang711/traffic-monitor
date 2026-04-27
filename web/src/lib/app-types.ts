@@ -12,6 +12,11 @@ export type LoginFormState = {
   password: string;
 };
 
+export type ChangePasswordFormState = {
+  currentPassword: string;
+  newPassword: string;
+};
+
 export type SSHKeyImportState = {
   name: string;
   privateKey: string;

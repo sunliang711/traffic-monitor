@@ -5,6 +5,7 @@ import { del, get, patch, post, put, withQuery } from "./api";
 import OverviewTab from "./components/OverviewTab";
 import { useI18n } from "./lib/i18n";
 import type {
+  ChangePasswordFormState,
   LoginFormState,
   MachineFormState,
   NotificationProxyFormState,
@@ -83,6 +84,11 @@ const emptyBackupExportForm = () => ({
   sshKeyIDs: [] as number[],
 });
 
+const emptyChangePasswordForm = (): ChangePasswordFormState => ({
+  currentPassword: "",
+  newPassword: "",
+});
+
 const defaultListPageSize = 50;
 
 function notificationProxyIDPayload(value: string) {
@@ -127,10 +133,12 @@ function App() {
   const [isLanguageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
   const [backupModalMode, setBackupModalMode] = useState<"export" | "import" | null>(null);
+  const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
   const [backupExportForm, setBackupExportForm] = useState(emptyBackupExportForm);
   const [backupImportPassword, setBackupImportPassword] = useState("");
   const [backupImportFileName, setBackupImportFileName] = useState("");
   const [backupImportFile, setBackupImportFile] = useState<EncryptedBackup | null>(null);
+  const [passwordForm, setPasswordForm] = useState<ChangePasswordFormState>(emptyChangePasswordForm());
   const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "AD";
   const currentLanguageLabel = language === "zh" ? t("languageChinese") : t("languageEnglish");
   const currentLanguageBadge = language === "zh" ? "中" : "EN";
@@ -434,6 +442,11 @@ function App() {
       setLoginForm((current) => ({ ...current, password: "" }));
       setToast(t("loginSuccess"));
     } catch (loginError) {
+      if (loginError instanceof Error && loginError.message === "username or password is incorrect") {
+        setError(t("loginCredentialsIncorrect"));
+        return;
+      }
+
       setError(toErrorMessage(loginError, language));
     } finally {
       setBusy(false);
@@ -471,6 +484,19 @@ function App() {
     setBackupImportPassword("");
     setBackupImportFileName("");
     setBackupImportFile(null);
+  }
+
+  function openPasswordModal() {
+    setActionMenuOpen(false);
+    setLanguageMenuOpen(false);
+    setAccountMenuOpen(false);
+    setError("");
+    setPasswordModalOpen(true);
+  }
+
+  function closePasswordModal() {
+    setPasswordModalOpen(false);
+    setPasswordForm(emptyChangePasswordForm());
   }
 
   function selectedNumberOptions(event: ChangeEvent<HTMLSelectElement>) {
@@ -562,6 +588,87 @@ function App() {
         skippedMachines: response.skipped_machines,
       }));
     });
+  }
+
+  async function handleChangePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (Array.from(passwordForm.newPassword).length < 6) {
+      setToast("");
+      setError(t("passwordMinLength"));
+      return;
+    }
+
+    await submitAction(async () => {
+      await patch<null, { current_password: string; new_password: string }>("/api/v1/auth/password", {
+        current_password: passwordForm.currentPassword,
+        new_password: passwordForm.newPassword,
+      });
+      closePasswordModal();
+      setToast(t("passwordChangeSuccess"));
+    }, (submitError) => {
+      if (submitError instanceof Error && submitError.message === "current password is incorrect") {
+        setError(t("currentPasswordIncorrect"));
+        return;
+      }
+
+      setError(toErrorMessage(submitError, language));
+    });
+  }
+
+  function renderPasswordModal() {
+    if (!isPasswordModalOpen) {
+      return null;
+    }
+
+    return (
+      <div className="modal-backdrop" role="presentation">
+        <section className="modal-panel password-modal-panel" aria-modal="true" role="dialog">
+          <div className="modal-header">
+            <div>
+              <h3 className="panel-title">{t("changePasswordTitle")}</h3>
+            </div>
+            <button className="secondary-button modal-close-button" onClick={closePasswordModal} type="button">
+              {t("close")}
+            </button>
+          </div>
+
+          <form className="form-grid" onSubmit={handleChangePasswordSubmit}>
+            <label className="field">
+              <span>{t("currentPassword")}</span>
+              <input
+                type="password"
+                required
+                value={passwordForm.currentPassword}
+                onChange={(event) =>
+                  setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))
+                }
+                placeholder={t("currentPasswordPlaceholder")}
+              />
+            </label>
+            <label className="field">
+              <span>{t("newPassword")}</span>
+              <input
+                type="password"
+                minLength={6}
+                required
+                value={passwordForm.newPassword}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+                placeholder={t("newPasswordPlaceholder")}
+              />
+            </label>
+            {error ? <p className="message error">{error}</p> : null}
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={closePasswordModal} type="button">
+                {t("cancel")}
+              </button>
+              <button className="primary-button" disabled={busy} type="submit">
+                {t("changePasswordSubmit")}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    );
   }
 
   function renderBackupModal() {
@@ -1246,14 +1353,18 @@ function App() {
     await loadAlertsPage(1, selectedAlertMachineID, pageSize);
   }
 
-  async function submitAction(action: () => Promise<void>) {
+  async function submitAction(action: () => Promise<void>, onError?: (submitError: unknown) => void) {
     setBusy(true);
     setError("");
     setToast("");
     try {
       await action();
     } catch (submitError) {
-      setError(toErrorMessage(submitError, language));
+      if (onError) {
+        onError(submitError);
+      } else {
+        setError(toErrorMessage(submitError, language));
+      }
     } finally {
       setBusy(false);
     }
@@ -1373,6 +1484,14 @@ function App() {
                       <strong>{profile.username}</strong>
                       <span>Admin</span>
                     </div>
+                    <button
+                      className="account-menu-item"
+                      onClick={openPasswordModal}
+                      role="menuitem"
+                      type="button"
+                    >
+                      {t("changePassword")}
+                    </button>
                     <button
                       className="account-menu-item danger"
                       onClick={() => {
@@ -1570,6 +1689,7 @@ function App() {
           />
           <Route path="*" element={<Navigate replace to="/overview" />} />
         </Routes>
+        {renderPasswordModal()}
         {renderBackupModal()}
       </section>
     </main>

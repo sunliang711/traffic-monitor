@@ -1557,6 +1557,10 @@ a {
   width: min(940px, 100%);
 }
 
+.password-modal-panel {
+  width: min(520px, 100%);
+}
+
 .backup-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

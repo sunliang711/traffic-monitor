@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"traffic-monitor/internal/config"
 	"traffic-monitor/internal/dto"
@@ -16,13 +17,17 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrAdminNotFound      = errors.New("admin not found")
+	ErrPasswordTooShort   = errors.New("password too short")
 )
+
+const minAdminPasswordLength = 6
 
 type AdminStore interface {
 	GetByID(ctx context.Context, adminID uint) (*model.Admin, error)
 	GetByUsername(ctx context.Context, username string) (*model.Admin, error)
 	Create(ctx context.Context, admin *model.Admin) error
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
+	UpdatePasswordHash(ctx context.Context, adminID uint, passwordHash string) error
 }
 
 type AuthService struct {
@@ -71,6 +76,40 @@ func (service *AuthService) GetProfile(ctx context.Context, adminID uint) (dto.A
 		ID:       admin.ID,
 		Username: admin.Username,
 	}, nil
+}
+
+func (service *AuthService) ChangePassword(ctx context.Context, adminID uint, currentPassword string, newPassword string) error {
+	if utf8.RuneCountInString(newPassword) < minAdminPasswordLength {
+		return ErrPasswordTooShort
+	}
+
+	admin, err := service.adminStore.GetByID(ctx, adminID)
+	if err != nil {
+		if repo.IsRecordNotFound(err) {
+			return ErrAdminNotFound
+		}
+
+		return fmt.Errorf("get admin for password change: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(admin.PasswordHash), []byte(currentPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash new admin password: %w", err)
+	}
+
+	if err := service.adminStore.UpdatePasswordHash(ctx, adminID, string(passwordHash)); err != nil {
+		if repo.IsRecordNotFound(err) {
+			return ErrAdminNotFound
+		}
+
+		return fmt.Errorf("update admin password hash: %w", err)
+	}
+
+	return nil
 }
 
 func (service *AuthService) EnsureBootstrapAdmin(ctx context.Context) (bool, error) {

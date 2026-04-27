@@ -45,6 +45,19 @@ func (repo *AdminRepo) Create(ctx context.Context, admin *model.Admin) error {
 	return nil
 }
 
+func (repo *AdminRepo) UpdatePasswordHash(ctx context.Context, adminID uint, passwordHash string) error {
+	result := repo.db.WithContext(ctx).Model(&model.Admin{}).Where("id = ?", adminID).Update("password_hash", passwordHash)
+	if result.Error != nil {
+		return fmt.Errorf("update admin password hash: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update admin password hash: %w", gorm.ErrRecordNotFound)
+	}
+
+	return nil
+}
+
 func (repo *AdminRepo) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	var count int64
 	if err := repo.db.WithContext(ctx).Model(&model.Admin{}).Where("username = ?", username).Count(&count).Error; err != nil {

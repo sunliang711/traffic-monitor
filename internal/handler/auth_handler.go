@@ -37,6 +37,7 @@ func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandle
 	authGroup.POST("/login", authHandler.Login)
 	authGroup.POST("/logout", authHandler.Logout)
 	authGroup.GET("/profile", authMiddleware.RequireAdmin(), authHandler.Profile)
+	authGroup.PATCH("/password", authMiddleware.RequireAdmin(), authHandler.ChangePassword)
 
 	authenticatedGroup := apiGroup.Group("")
 	authenticatedGroup.Use(authMiddleware.RequireAdmin())
@@ -65,7 +66,7 @@ func (handler *AuthHandler) Login(ctx *gin.Context) {
 			ctx.JSON(http.StatusUnauthorized, dto.Response{
 				Code:    http.StatusUnauthorized,
 				Data:    nil,
-				Message: "authentication failed",
+				Message: "username or password is incorrect",
 			})
 			return
 		}
@@ -152,6 +153,70 @@ func (handler *AuthHandler) Profile(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, dto.Response{
 		Code:    http.StatusOK,
 		Data:    profile,
+		Message: "success",
+	})
+}
+
+func (handler *AuthHandler) ChangePassword(ctx *gin.Context) {
+	adminID, ok := middleware.CurrentAdminID(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.Response{
+			Code:    http.StatusUnauthorized,
+			Data:    nil,
+			Message: "unauthorized",
+		})
+		return
+	}
+
+	var req dto.ChangePasswordReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.Response{
+			Code:    http.StatusBadRequest,
+			Data:    nil,
+			Message: "invalid request",
+		})
+		return
+	}
+
+	if err := handler.authService.ChangePassword(ctx.Request.Context(), adminID, req.CurrentPassword, req.NewPassword); err != nil {
+		if errors.Is(err, service.ErrPasswordTooShort) {
+			ctx.JSON(http.StatusBadRequest, dto.Response{
+				Code:    http.StatusBadRequest,
+				Data:    nil,
+				Message: "invalid request",
+			})
+			return
+		}
+
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			ctx.JSON(http.StatusUnauthorized, dto.Response{
+				Code:    http.StatusUnauthorized,
+				Data:    nil,
+				Message: "current password is incorrect",
+			})
+			return
+		}
+
+		if errors.Is(err, service.ErrAdminNotFound) {
+			ctx.JSON(http.StatusUnauthorized, dto.Response{
+				Code:    http.StatusUnauthorized,
+				Data:    nil,
+				Message: "unauthorized",
+			})
+			return
+		}
+
+		ctx.JSON(http.StatusInternalServerError, dto.Response{
+			Code:    http.StatusInternalServerError,
+			Data:    nil,
+			Message: "internal server error",
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dto.Response{
+		Code:    http.StatusOK,
+		Data:    nil,
 		Message: "success",
 	})
 }
