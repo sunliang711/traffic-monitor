@@ -1636,6 +1636,10 @@ a {
   table-layout: fixed;
 }
 
+.machine-threshold-editor table {
+  min-width: 960px;
+}
+
 .threshold-editor th:nth-child(1),
 .threshold-editor td:nth-child(1) {
   width: 140px;
@@ -1666,14 +1670,47 @@ a {
   width: 130px;
 }
 
+.machine-threshold-editor th:nth-child(3),
+.machine-threshold-editor td:nth-child(3) {
+  width: 210px;
+}
+
+.machine-threshold-editor th:nth-child(4),
+.machine-threshold-editor td:nth-child(4) {
+  width: 210px;
+}
+
+.machine-threshold-editor th:nth-child(5),
+.machine-threshold-editor td:nth-child(5) {
+  width: 150px;
+}
+
+.machine-threshold-editor th:nth-child(6),
+.machine-threshold-editor td:nth-child(6) {
+  width: 240px;
+}
+
 .threshold-editor input:not([type="checkbox"]),
 .threshold-editor select {
   max-width: 220px;
 }
 
+.threshold-editor input:disabled,
+.threshold-editor select:disabled {
+  color: #8794a8;
+  cursor: not-allowed;
+  background: #182131;
+}
+
 .threshold-editor input[type="checkbox"] {
   width: 18px;
   height: 18px;
+}
+
+.machine-threshold-editor .status-badge {
+  min-width: 0;
+  max-width: 220px;
+  white-space: normal;
 }
 
 .threshold-toolbar-actions {

@@ -7,12 +7,14 @@ type ThresholdFormRow = {
   threshold_value: string;
   threshold_unit: "MB" | "GB";
   enabled: boolean;
+  strategy: "inherit" | "override" | "disabled";
   source?: string;
 };
 
 type ThresholdEditorProps = {
   rows: ThresholdFormRow[];
   onChange: (rows: ThresholdFormRow[]) => void;
+  mode?: "global" | "machine";
   showSource?: boolean;
 };
 
@@ -29,19 +31,22 @@ function updateRow<Key extends keyof ThresholdFormRow>(
 
 export default function ThresholdEditor(props: ThresholdEditorProps) {
   const { language, t } = useI18n();
+  const mode = props.mode ?? "global";
+  const isMachineMode = mode === "machine";
   const showSource = props.showSource ?? true;
 
   return (
-    <div className="table-wrapper threshold-editor">
+    <div className={`table-wrapper threshold-editor${isMachineMode ? " machine-threshold-editor" : ""}`}>
       <table>
         <thead>
           <tr>
             <th>{t("thresholdPeriod")}</th>
             <th>{t("thresholdDimension")}</th>
+            {isMachineMode ? <th>{t("thresholdStrategy")}</th> : null}
             <th>{t("thresholdValue")}</th>
             <th>{t("thresholdUnit")}</th>
-            <th>{t("thresholdEnabled")}</th>
-            {showSource ? <th>{t("thresholdSource")}</th> : null}
+            {isMachineMode ? <th>{t("thresholdEffectiveRule")}</th> : <th>{t("thresholdEnabled")}</th>}
+            {!isMachineMode && showSource ? <th>{t("thresholdSource")}</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -49,14 +54,36 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
             <tr key={`${row.period_type}-${row.metric_type}`}>
               <td>{formatPeriodType(row.period_type, language)}</td>
               <td>{formatMetricType(row.metric_type, language)}</td>
+              {isMachineMode ? (
+                <td>
+                  <select
+                    value={row.strategy}
+                    onChange={(event) =>
+                      updateRow(
+                        props.rows,
+                        index,
+                        "strategy",
+                        event.target.value as "inherit" | "override" | "disabled",
+                        props.onChange,
+                      )
+                    }
+                  >
+                    <option value="inherit">{t("thresholdStrategyInherit")}</option>
+                    <option value="override">{t("thresholdStrategyOverride")}</option>
+                    <option value="disabled">{t("thresholdStrategyDisabled")}</option>
+                  </select>
+                </td>
+              ) : null}
               <td>
                 <input
+                  disabled={isMachineMode && row.strategy === "inherit"}
                   value={row.threshold_value}
                   onChange={(event) => updateRow(props.rows, index, "threshold_value", event.target.value, props.onChange)}
                 />
               </td>
               <td>
                 <select
+                  disabled={isMachineMode && row.strategy === "inherit"}
                   value={row.threshold_unit}
                   onChange={(event) =>
                     updateRow(
@@ -72,20 +99,56 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
                   <option value="GB">GB</option>
                 </select>
               </td>
-              <td>
-                <input
-                  checked={row.enabled}
-                  onChange={(event) => updateRow(props.rows, index, "enabled", event.target.checked, props.onChange)}
-                  type="checkbox"
-                />
-              </td>
-              {showSource ? <td>{formatThresholdSource(row.source, language)}</td> : null}
+              {isMachineMode ? (
+                <td>
+                  <span className={`status-badge ${thresholdEffectiveClassName(row)}`}>
+                    {formatThresholdEffectiveRule(row, t)}
+                  </span>
+                </td>
+              ) : (
+                <td>
+                  <input
+                    checked={row.enabled}
+                    onChange={(event) => updateRow(props.rows, index, "enabled", event.target.checked, props.onChange)}
+                    type="checkbox"
+                  />
+                </td>
+              )}
+              {!isMachineMode && showSource ? <td>{formatThresholdSource(row.source, language)}</td> : null}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function formatThresholdEffectiveRule(row: ThresholdFormRow, t: ReturnType<typeof useI18n>["t"]) {
+  const value = row.threshold_value ? `${row.threshold_value} ${row.threshold_unit}` : "-";
+
+  if (row.strategy === "override") {
+    return t("thresholdEffectiveMachineOverride", { value });
+  }
+
+  if (row.strategy === "disabled") {
+    return t("thresholdEffectiveMachineDisabled");
+  }
+
+  return row.enabled
+    ? t("thresholdEffectiveGlobalEnabled", { value })
+    : t("thresholdEffectiveGlobalDisabled", { value });
+}
+
+function thresholdEffectiveClassName(row: ThresholdFormRow) {
+  if (row.strategy === "override") {
+    return "ok";
+  }
+
+  if (row.strategy === "disabled") {
+    return "error";
+  }
+
+  return row.enabled ? "pending" : "idle";
 }
 
 export type { ThresholdFormRow };

@@ -41,6 +41,7 @@ export type ThresholdRule = {
   threshold_unit: string;
   enabled: boolean;
   source?: string;
+  strategy?: "inherit" | "override" | "disabled";
 };
 
 export type NotificationChannel = {

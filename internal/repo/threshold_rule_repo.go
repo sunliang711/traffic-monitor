@@ -14,6 +14,11 @@ type ThresholdRuleRepo struct {
 	db *gorm.DB
 }
 
+type ThresholdRuleDimension struct {
+	PeriodType string
+	MetricType string
+}
+
 func NewThresholdRuleRepo(db *gorm.DB) *ThresholdRuleRepo {
 	return &ThresholdRuleRepo{db: db}
 }
@@ -59,6 +64,50 @@ func (repo *ThresholdRuleRepo) UpsertMachineRules(ctx context.Context, rules []m
 		DoUpdates: clause.AssignmentColumns([]string{"threshold_mb", "enabled", "updated_at"}),
 	}).Create(&rules).Error; err != nil {
 		return fmt.Errorf("upsert machine threshold rules: %w", err)
+	}
+
+	return nil
+}
+
+func (repo *ThresholdRuleRepo) ReplaceMachineRules(ctx context.Context, machineID uint, rules []model.MachineThresholdRule, inheritedDimensions []ThresholdRuleDimension) error {
+	if len(rules) == 0 && len(inheritedDimensions) == 0 {
+		return nil
+	}
+
+	if err := repo.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := &ThresholdRuleRepo{db: tx}
+		if err := txRepo.DeleteMachineRules(ctx, machineID, inheritedDimensions); err != nil {
+			return err
+		}
+
+		if err := txRepo.UpsertMachineRules(ctx, rules); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("replace machine threshold rules: %w", err)
+	}
+
+	return nil
+}
+
+func (repo *ThresholdRuleRepo) DeleteMachineRules(ctx context.Context, machineID uint, dimensions []ThresholdRuleDimension) error {
+	if len(dimensions) == 0 {
+		return nil
+	}
+
+	dimensionQuery := repo.db.Where("period_type = ? AND metric_type = ?", dimensions[0].PeriodType, dimensions[0].MetricType)
+	for _, dimension := range dimensions[1:] {
+		dimensionQuery = dimensionQuery.Or("period_type = ? AND metric_type = ?", dimension.PeriodType, dimension.MetricType)
+	}
+
+	query := repo.db.WithContext(ctx).
+		Where("machine_id = ?", machineID).
+		Where(dimensionQuery)
+
+	if err := query.Delete(&model.MachineThresholdRule{}).Error; err != nil {
+		return fmt.Errorf("delete machine threshold rules: %w", err)
 	}
 
 	return nil

@@ -1264,7 +1264,7 @@ function App() {
       await put<null, { rules: ReturnType<typeof toThresholdPayloads> }>(
         `/api/v1/machines/${selectedThresholdMachineID}/thresholds`,
         {
-          rules: toThresholdPayloads(machineThresholdForm, language),
+          rules: toThresholdPayloads(machineThresholdForm, language, "machine"),
         },
       );
       await loadMachineThresholds(selectedThresholdMachineID);

@@ -6,6 +6,7 @@ import (
 
 	"traffic-monitor/internal/dto"
 	"traffic-monitor/internal/model"
+	"traffic-monitor/internal/repo"
 
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +35,42 @@ func (store *stubThresholdRuleStore) UpsertMachineRules(_ context.Context, rules
 	}
 
 	return nil
+}
+
+func (store *stubThresholdRuleStore) DeleteMachineRules(_ context.Context, machineID uint, dimensions []repo.ThresholdRuleDimension) error {
+	if len(dimensions) == 0 {
+		return nil
+	}
+
+	if store.machineRules == nil {
+		return nil
+	}
+
+	currentRules := store.machineRules[machineID]
+	nextRules := make([]model.MachineThresholdRule, 0, len(currentRules))
+	for _, rule := range currentRules {
+		shouldDelete := false
+		for _, dimension := range dimensions {
+			if rule.PeriodType == dimension.PeriodType && rule.MetricType == dimension.MetricType {
+				shouldDelete = true
+				break
+			}
+		}
+		if !shouldDelete {
+			nextRules = append(nextRules, rule)
+		}
+	}
+	store.machineRules[machineID] = nextRules
+
+	return nil
+}
+
+func (store *stubThresholdRuleStore) ReplaceMachineRules(ctx context.Context, machineID uint, rules []model.MachineThresholdRule, inheritedDimensions []repo.ThresholdRuleDimension) error {
+	if err := store.DeleteMachineRules(ctx, machineID, inheritedDimensions); err != nil {
+		return err
+	}
+
+	return store.UpsertMachineRules(ctx, rules)
 }
 
 func (store *stubThresholdRuleStore) ListMachineRules(_ context.Context, machineID uint) ([]model.MachineThresholdRule, error) {
@@ -89,6 +126,76 @@ func TestListEffectiveMachineRules(t *testing.T) {
 	require.Equal(t, thresholdSourceMachine, rules[0].Source)
 	require.Equal(t, 512.0, rules[0].ThresholdMB)
 	require.Equal(t, thresholdSourceGlobal, rules[1].Source)
+}
+
+func TestListEffectiveMachineRulesKeepsDisabledMachineOverride(t *testing.T) {
+	service := &ThresholdService{
+		thresholdRuleStore: &stubThresholdRuleStore{
+			globalRules: []model.GlobalThresholdRule{
+				{PeriodType: thresholdPeriodHourly, MetricType: thresholdMetricTotal, ThresholdMB: 1024, Enabled: true},
+			},
+			machineRules: map[uint][]model.MachineThresholdRule{
+				1: {
+					{MachineID: 1, PeriodType: thresholdPeriodHourly, MetricType: thresholdMetricTotal, ThresholdMB: 512, Enabled: false},
+				},
+			},
+		},
+		machineStore: &stubThresholdMachineStore{
+			machines: map[uint]*model.Machine{
+				1: {Base: model.Base{ID: 1}},
+			},
+		},
+	}
+
+	rules, err := service.ListEffectiveMachineRules(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, rules, 1)
+	require.Equal(t, thresholdSourceMachine, rules[0].Source)
+	require.Equal(t, thresholdStrategyDisabled, rules[0].Strategy)
+	require.False(t, rules[0].Enabled)
+	require.Equal(t, 512.0, rules[0].ThresholdMB)
+}
+
+func TestUpsertMachineRulesInheritDeletesMachineOverride(t *testing.T) {
+	store := &stubThresholdRuleStore{
+		globalRules: []model.GlobalThresholdRule{
+			{PeriodType: thresholdPeriodHourly, MetricType: thresholdMetricTotal, ThresholdMB: 1024, Enabled: true},
+		},
+		machineRules: map[uint][]model.MachineThresholdRule{
+			1: {
+				{MachineID: 1, PeriodType: thresholdPeriodHourly, MetricType: thresholdMetricTotal, ThresholdMB: 512, Enabled: false},
+			},
+		},
+	}
+	service := &ThresholdService{
+		thresholdRuleStore: store,
+		machineStore: &stubThresholdMachineStore{
+			machines: map[uint]*model.Machine{
+				1: {Base: model.Base{ID: 1}},
+			},
+		},
+	}
+
+	err := service.UpsertMachineRules(context.Background(), 1, dto.UpsertThresholdRulesReq{
+		Rules: []dto.ThresholdRulePayload{
+			{
+				PeriodType:     thresholdPeriodHourly,
+				MetricType:     thresholdMetricTotal,
+				ThresholdValue: 0,
+				ThresholdUnit:  thresholdUnitGB,
+				Strategy:       thresholdStrategyInherit,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	rules, err := service.ListEffectiveMachineRules(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, rules, 1)
+	require.Equal(t, thresholdSourceGlobal, rules[0].Source)
+	require.Equal(t, thresholdStrategyInherit, rules[0].Strategy)
+	require.True(t, rules[0].Enabled)
+	require.Equal(t, 1024.0, rules[0].ThresholdMB)
 }
 
 func TestUpsertGlobalRulesRejectsInvalidUnit(t *testing.T) {

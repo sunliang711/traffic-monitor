@@ -26,6 +26,7 @@ export type ThresholdFormRow = {
   threshold_value: string;
   threshold_unit: "MB" | "GB";
   enabled: boolean;
+  strategy: "inherit" | "override" | "disabled";
   source?: string;
 };
 
@@ -35,6 +36,7 @@ export type ThresholdRulePayload = {
   threshold_value: number;
   threshold_unit: "MB" | "GB";
   enabled: boolean;
+  strategy?: "inherit" | "override" | "disabled";
 };
 
 export const tabs: Array<{ key: TabKey; path: string }> = [
@@ -62,23 +64,37 @@ export const emptyThresholdRows = (): ThresholdFormRow[] =>
     threshold_value: "",
     threshold_unit: "GB",
     enabled: false,
+    strategy: "inherit",
   }));
 
-export function toThresholdPayloads(rows: ThresholdFormRow[], language: Language = "zh"): ThresholdRulePayload[] {
+export function toThresholdPayloads(
+  rows: ThresholdFormRow[],
+  language: Language = "zh",
+  scope: "global" | "machine" = "global",
+): ThresholdRulePayload[] {
   return rows.map((row) => ({
     period_type: row.period_type,
     metric_type: row.metric_type,
-    threshold_value: parseThresholdValue(row, language),
+    threshold_value: parseThresholdValue(row, language, scope),
     threshold_unit: row.threshold_unit,
-    enabled: row.enabled,
+    enabled: scope === "machine" ? row.strategy === "override" : row.enabled,
+    strategy: scope === "machine" ? row.strategy : undefined,
   }));
 }
 
-function parseThresholdValue(row: ThresholdFormRow, language: Language) {
+function parseThresholdValue(row: ThresholdFormRow, language: Language, scope: "global" | "machine") {
   const rawValue = row.threshold_value.trim();
   const value = Number(rawValue || "0");
 
-  if ((row.enabled || rawValue !== "") && (!Number.isFinite(value) || value <= 0)) {
+  if (scope === "machine" && row.strategy === "inherit") {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+
+    return value;
+  }
+
+  if ((row.enabled || rawValue !== "" || (scope === "machine" && row.strategy !== "inherit")) && (!Number.isFinite(value) || value <= 0)) {
     throw new Error(translate(language, "thresholdInvalidValue"));
   }
 
@@ -93,6 +109,7 @@ export function toThresholdFormRows(
     threshold_unit: string;
     enabled: boolean;
     source?: string;
+    strategy?: string;
   }>,
 ): ThresholdFormRow[] {
   return thresholdDimensions.map((dimension) => {
@@ -105,9 +122,31 @@ export function toThresholdFormRows(
       threshold_value: matched ? String(matched.threshold_value) : "",
       threshold_unit: (matched?.threshold_unit as "MB" | "GB") || "GB",
       enabled: matched?.enabled ?? false,
+      strategy: normalizeThresholdStrategy(matched),
       source: matched?.source,
     };
   });
+}
+
+function normalizeThresholdStrategy(rule?: { enabled: boolean; source?: string; strategy?: string }) {
+  if (!rule) {
+    return "inherit";
+  }
+
+  switch (rule.strategy) {
+    case "inherit":
+    case "override":
+    case "disabled":
+      return rule.strategy;
+    default:
+      break;
+  }
+
+  if (rule.source === "machine") {
+    return rule.enabled ? "override" : "disabled";
+  }
+
+  return "inherit";
 }
 
 export function safeParseHeaders(value: string, language: Language = "zh"): Record<string, string> {

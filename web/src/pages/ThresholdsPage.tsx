@@ -73,6 +73,7 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
 
         <form id="threshold-form" onSubmit={activeSubmitHandler}>
           <ThresholdEditor
+            mode={isMachineThresholdSelected ? "machine" : "global"}
             rows={activeRows}
             onChange={activeChangeHandler}
           />

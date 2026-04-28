@@ -3,9 +3,10 @@ package dto
 type ThresholdRulePayload struct {
 	PeriodType     string  `json:"period_type" binding:"required"`
 	MetricType     string  `json:"metric_type" binding:"required"`
-	ThresholdValue float64 `json:"threshold_value" binding:"required"`
+	ThresholdValue float64 `json:"threshold_value"`
 	ThresholdUnit  string  `json:"threshold_unit" binding:"required"`
 	Enabled        bool    `json:"enabled"`
+	Strategy       string  `json:"strategy,omitempty"`
 }
 
 type UpsertThresholdRulesReq struct {
@@ -20,4 +21,5 @@ type ThresholdRuleResp struct {
 	ThresholdUnit  string  `json:"threshold_unit"`
 	Enabled        bool    `json:"enabled"`
 	Source         string  `json:"source,omitempty"`
+	Strategy       string  `json:"strategy,omitempty"`
 }

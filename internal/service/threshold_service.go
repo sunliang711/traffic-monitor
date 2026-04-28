@@ -12,15 +12,18 @@ import (
 )
 
 const (
-	thresholdPeriodHourly   = "hourly"
-	thresholdPeriodDaily    = "daily"
-	thresholdMetricUpload   = "upload"
-	thresholdMetricDownload = "download"
-	thresholdMetricTotal    = "total"
-	thresholdUnitMB         = "MB"
-	thresholdUnitGB         = "GB"
-	thresholdSourceGlobal   = "global"
-	thresholdSourceMachine  = "machine"
+	thresholdPeriodHourly     = "hourly"
+	thresholdPeriodDaily      = "daily"
+	thresholdMetricUpload     = "upload"
+	thresholdMetricDownload   = "download"
+	thresholdMetricTotal      = "total"
+	thresholdUnitMB           = "MB"
+	thresholdUnitGB           = "GB"
+	thresholdSourceGlobal     = "global"
+	thresholdSourceMachine    = "machine"
+	thresholdStrategyInherit  = "inherit"
+	thresholdStrategyOverride = "override"
+	thresholdStrategyDisabled = "disabled"
 )
 
 var (
@@ -30,7 +33,7 @@ var (
 type ThresholdRuleStore interface {
 	UpsertGlobalRules(ctx context.Context, rules []model.GlobalThresholdRule) error
 	ListGlobalRules(ctx context.Context) ([]model.GlobalThresholdRule, error)
-	UpsertMachineRules(ctx context.Context, rules []model.MachineThresholdRule) error
+	ReplaceMachineRules(ctx context.Context, machineID uint, rules []model.MachineThresholdRule, inheritedDimensions []repo.ThresholdRuleDimension) error
 	ListMachineRules(ctx context.Context, machineID uint) ([]model.MachineThresholdRule, error)
 }
 
@@ -81,13 +84,13 @@ func (service *ThresholdService) UpsertMachineRules(ctx context.Context, machine
 		return fmt.Errorf("get machine for threshold upsert: %w", err)
 	}
 
-	rules, err := buildMachineRules(machineID, req.Rules)
+	rules, inheritedDimensions, err := buildMachineRules(machineID, req.Rules)
 	if err != nil {
 		return err
 	}
 
-	if err := service.thresholdRuleStore.UpsertMachineRules(ctx, rules); err != nil {
-		return fmt.Errorf("upsert machine threshold rules: %w", err)
+	if err := service.thresholdRuleStore.ReplaceMachineRules(ctx, machineID, rules, inheritedDimensions); err != nil {
+		return fmt.Errorf("replace machine threshold rules: %w", err)
 	}
 
 	return nil
@@ -138,16 +141,30 @@ func buildGlobalRules(payloads []dto.ThresholdRulePayload) ([]model.GlobalThresh
 	return rules, nil
 }
 
-func buildMachineRules(machineID uint, payloads []dto.ThresholdRulePayload) ([]model.MachineThresholdRule, error) {
+func buildMachineRules(machineID uint, payloads []dto.ThresholdRulePayload) ([]model.MachineThresholdRule, []repo.ThresholdRuleDimension, error) {
 	rules := make([]model.MachineThresholdRule, 0, len(payloads))
+	inheritedDimensions := make([]repo.ThresholdRuleDimension, 0, len(payloads))
 	for _, payload := range payloads {
-		thresholdMB, err := normalizeThresholdMB(payload.ThresholdValue, payload.ThresholdUnit)
-		if err != nil {
-			return nil, err
+		if err := validateThresholdDimension(payload.PeriodType, payload.MetricType); err != nil {
+			return nil, nil, err
 		}
 
-		if err := validateThresholdDimension(payload.PeriodType, payload.MetricType); err != nil {
-			return nil, err
+		strategy, err := normalizeMachineThresholdStrategy(payload)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if strategy == thresholdStrategyInherit {
+			inheritedDimensions = append(inheritedDimensions, repo.ThresholdRuleDimension{
+				PeriodType: payload.PeriodType,
+				MetricType: payload.MetricType,
+			})
+			continue
+		}
+
+		thresholdMB, err := normalizeThresholdMB(payload.ThresholdValue, payload.ThresholdUnit)
+		if err != nil {
+			return nil, nil, err
 		}
 
 		rules = append(rules, model.MachineThresholdRule{
@@ -155,11 +172,26 @@ func buildMachineRules(machineID uint, payloads []dto.ThresholdRulePayload) ([]m
 			PeriodType:  payload.PeriodType,
 			MetricType:  payload.MetricType,
 			ThresholdMB: thresholdMB,
-			Enabled:     payload.Enabled,
+			Enabled:     strategy == thresholdStrategyOverride,
 		})
 	}
 
-	return rules, nil
+	return rules, inheritedDimensions, nil
+}
+
+func normalizeMachineThresholdStrategy(payload dto.ThresholdRulePayload) (string, error) {
+	switch payload.Strategy {
+	case "":
+		if payload.Enabled {
+			return thresholdStrategyOverride, nil
+		}
+
+		return thresholdStrategyDisabled, nil
+	case thresholdStrategyInherit, thresholdStrategyOverride, thresholdStrategyDisabled:
+		return payload.Strategy, nil
+	default:
+		return "", ErrInvalidThresholdRule
+	}
 }
 
 func normalizeThresholdMB(value float64, unit string) (float64, error) {
@@ -193,7 +225,7 @@ func validateThresholdDimension(periodType string, metricType string) error {
 func toThresholdResponsesFromGlobal(rules []model.GlobalThresholdRule) []dto.ThresholdRuleResp {
 	result := make([]dto.ThresholdRuleResp, 0, len(rules))
 	for _, rule := range rules {
-		result = append(result, thresholdRuleResp(rule.PeriodType, rule.MetricType, rule.ThresholdMB, rule.Enabled, thresholdSourceGlobal))
+		result = append(result, thresholdRuleResp(rule.PeriodType, rule.MetricType, rule.ThresholdMB, rule.Enabled, thresholdSourceGlobal, ""))
 	}
 
 	return result
@@ -206,20 +238,39 @@ func mergeEffectiveRules(globalRules []model.GlobalThresholdRule, machineRules [
 		machineRuleMap[thresholdRuleKey(rule.PeriodType, rule.MetricType)] = rule
 	}
 
+	mergedRuleMap := make(map[string]struct{}, len(globalRules)+len(machineRules))
 	for _, globalRule := range globalRules {
 		key := thresholdRuleKey(globalRule.PeriodType, globalRule.MetricType)
+		mergedRuleMap[key] = struct{}{}
 		if machineRule, ok := machineRuleMap[key]; ok {
-			result = append(result, thresholdRuleResp(machineRule.PeriodType, machineRule.MetricType, machineRule.ThresholdMB, machineRule.Enabled, thresholdSourceMachine))
+			strategy := thresholdStrategyDisabled
+			if machineRule.Enabled {
+				strategy = thresholdStrategyOverride
+			}
+			result = append(result, thresholdRuleResp(machineRule.PeriodType, machineRule.MetricType, machineRule.ThresholdMB, machineRule.Enabled, thresholdSourceMachine, strategy))
 			continue
 		}
 
-		result = append(result, thresholdRuleResp(globalRule.PeriodType, globalRule.MetricType, globalRule.ThresholdMB, globalRule.Enabled, thresholdSourceGlobal))
+		result = append(result, thresholdRuleResp(globalRule.PeriodType, globalRule.MetricType, globalRule.ThresholdMB, globalRule.Enabled, thresholdSourceGlobal, thresholdStrategyInherit))
+	}
+
+	for _, machineRule := range machineRules {
+		key := thresholdRuleKey(machineRule.PeriodType, machineRule.MetricType)
+		if _, ok := mergedRuleMap[key]; ok {
+			continue
+		}
+
+		strategy := thresholdStrategyDisabled
+		if machineRule.Enabled {
+			strategy = thresholdStrategyOverride
+		}
+		result = append(result, thresholdRuleResp(machineRule.PeriodType, machineRule.MetricType, machineRule.ThresholdMB, machineRule.Enabled, thresholdSourceMachine, strategy))
 	}
 
 	return result
 }
 
-func thresholdRuleResp(periodType string, metricType string, thresholdMB float64, enabled bool, source string) dto.ThresholdRuleResp {
+func thresholdRuleResp(periodType string, metricType string, thresholdMB float64, enabled bool, source string, strategy string) dto.ThresholdRuleResp {
 	value, unit := displayThresholdValue(thresholdMB)
 	return dto.ThresholdRuleResp{
 		PeriodType:     periodType,
@@ -229,6 +280,7 @@ func thresholdRuleResp(periodType string, metricType string, thresholdMB float64
 		ThresholdUnit:  unit,
 		Enabled:        enabled,
 		Source:         source,
+		Strategy:       strategy,
 	}
 }
 

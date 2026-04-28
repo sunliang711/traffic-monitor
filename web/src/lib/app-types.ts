@@ -50,6 +50,7 @@ export type ThresholdFormRow = {
   threshold_value: string;
   threshold_unit: "MB" | "GB";
   enabled: boolean;
+  strategy: "inherit" | "override" | "disabled";
   source?: string;
 };
 
@@ -93,6 +94,7 @@ export type ThresholdRulePayload = {
   threshold_value: number;
   threshold_unit: "MB" | "GB";
   enabled: boolean;
+  strategy?: "inherit" | "override" | "disabled";
 };
 
 export type TabDefinition = {
