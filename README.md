@@ -111,10 +111,15 @@ cp config/config.toml.example config/config.toml
 - `init_admin_username`：首次启动时初始化管理员用户名
 - `init_admin_password`：首次启动时初始化管理员密码
 
+#### `[restore]`
+
+- `mode`：恢复模式，忘记管理员密码时可临时设置为 `admin-password`
+- `token`：恢复模式使用的一次性强随机 Token，启动后 5 分钟内有效，建议使用 `openssl rand -hex 32` 生成
+
 说明：
 
 - `bootstrap.init_admin_username` 和 `bootstrap.init_admin_password` 必须同时配置，或同时留空
-- `session.secret`、`security.app_master_key`、初始化管理员密码等敏感信息，建议优先放在 `config/private.toml` 或环境变量中
+- `session.secret`、`security.app_master_key`、初始化管理员密码、恢复 Token 等敏感信息，建议优先放在 `config/private.toml` 或环境变量中
 
 ## 日志格式说明
 
@@ -228,6 +233,8 @@ services:
       APP_MASTER_KEY: ${APP_MASTER_KEY}
       INIT_ADMIN_USERNAME: ${INIT_ADMIN_USERNAME}
       INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD}
+      RESTORE_MODE: ${RESTORE_MODE:-}
+      RESTORE_TOKEN: ${RESTORE_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       COLLECTOR_INTERVAL: ${COLLECTOR_INTERVAL:-300s}
@@ -283,6 +290,8 @@ POSTGRES_PASSWORD=replace-with-strong-postgres-password
 | `APP_MASTER_KEY` | 是 | 是 | 无 | 敏感数据加密主密钥，必须是 base64 编码后的 32 字节密钥 |
 | `INIT_ADMIN_USERNAME` | 首次部署需要 | 否 | `admin` | 首次启动时初始化管理员用户名 |
 | `INIT_ADMIN_PASSWORD` | 首次部署需要 | 是 | 无 | 首次启动时初始化管理员密码 |
+| `RESTORE_MODE` | 否 | 否 | 无 | 忘记管理员密码时临时设置为 `admin-password` |
+| `RESTORE_TOKEN` | 启用恢复模式时需要 | 是 | 无 | 恢复模式使用的一次性 Token，启动后 5 分钟内有效，建议使用 `openssl rand -hex 32` 生成 |
 | `LOG_LEVEL` | 否 | 否 | `info` | 日志级别，例如 `debug` / `info` / `warn` / `error` |
 | `LOG_FORMAT` | 否 | 否 | `json` | 日志格式，支持 `json` / `console` |
 | `COLLECTOR_INTERVAL` | 否 | 否 | `300s` | 定时采集周期 |
@@ -291,6 +300,7 @@ POSTGRES_PASSWORD=replace-with-strong-postgres-password
 
 - `APP_MASTER_KEY` 一旦用于加密 SSH Key 等敏感数据，后续不能随意更换，否则已有密文无法解密。
 - `INIT_ADMIN_USERNAME` 和 `INIT_ADMIN_PASSWORD` 必须同时配置或同时留空。
+- `RESTORE_MODE` 仅用于恢复密码，`RESTORE_TOKEN` 在服务启动后 5 分钟内有效；重置成功后应删除 `RESTORE_MODE` 和 `RESTORE_TOKEN` 并重启服务。
 - `POSTGRES_DSN` 在 `docker-compose.yml` 中会根据 PostgreSQL 配置自动拼接，通常不需要在 `.env` 中手动配置。
 - 如果只允许本机访问数据库，可以设置 `POSTGRES_PORT=127.0.0.1:5432`，或移除 `postgres` 服务的 `ports` 配置。
 
@@ -300,6 +310,23 @@ POSTGRES_PASSWORD=replace-with-strong-postgres-password
 
 ```bash
 docker compose up -d --build
+```
+
+### 管理员密码恢复
+
+忘记管理员密码时，可以临时启用恢复模式：
+
+```bash
+RESTORE_TOKEN="$(openssl rand -hex 32)"
+printf '\nRESTORE_MODE=admin-password\nRESTORE_TOKEN=%s\n' "${RESTORE_TOKEN}" >> .env
+docker compose up -d
+echo "Restore Token: ${RESTORE_TOKEN}"
+```
+
+然后访问 Web UI，首页会切换为管理员密码恢复页面。重置成功后删除 `.env` 中的 `RESTORE_MODE` 和 `RESTORE_TOKEN`，再执行：
+
+```bash
+docker compose up -d
 ```
 
 查看服务状态：

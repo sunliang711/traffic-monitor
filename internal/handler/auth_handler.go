@@ -27,11 +27,16 @@ func NewAuthHandler(authService *service.AuthService, sessionStore *sessions.Coo
 	}
 }
 
-func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, authMiddleware *middleware.AuthMiddleware, sshKeyHandler *SSHKeyHandler, machineHandler *MachineHandler, backupHandler *BackupHandler, thresholdHandler *ThresholdHandler, trafficSampleHandler *TrafficSampleHandler, alertHandler *AlertHandler) {
+func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, restoreHandler *RestoreHandler, authMiddleware *middleware.AuthMiddleware, sshKeyHandler *SSHKeyHandler, machineHandler *MachineHandler, backupHandler *BackupHandler, thresholdHandler *ThresholdHandler, trafficSampleHandler *TrafficSampleHandler, alertHandler *AlertHandler, restoreConfig config.RestoreConfig) {
 	engine.GET("/healthz", healthHandler.GetHealth)
 
 	apiGroup := engine.Group("/api/v1")
 	apiGroup.GET("/health", healthHandler.GetHealth)
+
+	if restoreConfig.Enabled() {
+		restoreHandler.RegisterRoutes(apiGroup)
+		return
+	}
 
 	authGroup := apiGroup.Group("/auth")
 	authGroup.POST("/login", authHandler.Login)

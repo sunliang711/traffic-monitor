@@ -50,9 +50,14 @@ func NewTrafficScheduler(cfg config.CollectorConfig, collector TrafficCollectRun
 	}
 }
 
-func RegisterTrafficScheduler(lifecycle fx.Lifecycle, scheduler *TrafficScheduler) {
+func RegisterTrafficScheduler(lifecycle fx.Lifecycle, scheduler *TrafficScheduler, restoreConfig config.RestoreConfig) {
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startContext context.Context) error {
+			if restoreConfig.Enabled() {
+				scheduler.log.Info().Msg("traffic scheduler disabled in restore mode")
+				return nil
+			}
+
 			if !scheduler.cfg.Enabled {
 				scheduler.log.Info().Msg("traffic scheduler disabled")
 				return nil

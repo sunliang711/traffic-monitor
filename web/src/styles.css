@@ -956,6 +956,17 @@ a {
   background: var(--surface-strong);
 }
 
+.restore-panel {
+  width: min(760px, 100%);
+}
+
+.restore-note {
+  margin: 14px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 .grid {
   display: grid;
   gap: 20px;

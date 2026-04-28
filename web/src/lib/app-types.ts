@@ -17,6 +17,13 @@ export type ChangePasswordFormState = {
   newPassword: string;
 };
 
+export type RestorePasswordFormState = {
+  username: string;
+  restoreToken: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
 export type SSHKeyImportState = {
   name: string;
   privateKey: string;

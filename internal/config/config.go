@@ -2,8 +2,11 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
+
+const RestoreModeAdminPassword = "admin-password"
 
 type Config struct {
 	App            AppConfig            `mapstructure:"app"`
@@ -16,6 +19,7 @@ type Config struct {
 	SSH            SSHConfig            `mapstructure:"ssh"`
 	Security       SecurityConfig       `mapstructure:"security"`
 	Bootstrap      BootstrapConfig      `mapstructure:"bootstrap"`
+	Restore        RestoreConfig        `mapstructure:"restore"`
 }
 
 type AppConfig struct {
@@ -78,6 +82,15 @@ type SSHConfig struct {
 type BootstrapConfig struct {
 	InitAdminUsername string `mapstructure:"init_admin_username"`
 	InitAdminPassword string `mapstructure:"init_admin_password"`
+}
+
+type RestoreConfig struct {
+	Mode  string `mapstructure:"mode"`
+	Token string `mapstructure:"token"`
+}
+
+func (cfg RestoreConfig) Enabled() bool {
+	return cfg.Mode == RestoreModeAdminPassword
 }
 
 func NewConfig() (Config, error) {
@@ -188,6 +201,14 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("bootstrap init admin username and password must be configured together")
 	}
 
+	if cfg.Restore.Mode != "" && cfg.Restore.Mode != RestoreModeAdminPassword {
+		return fmt.Errorf("restore.mode must be empty or %q", RestoreModeAdminPassword)
+	}
+
+	if cfg.Restore.Enabled() && len(strings.TrimSpace(cfg.Restore.Token)) < 32 {
+		return fmt.Errorf("restore.token must be configured with at least 32 characters when restore mode is enabled")
+	}
+
 	return nil
 }
 
@@ -229,4 +250,8 @@ func ProvideSecurityConfig(cfg Config) SecurityConfig {
 
 func ProvideBootstrapConfig(cfg Config) BootstrapConfig {
 	return cfg.Bootstrap
+}
+
+func ProvideRestoreConfig(cfg Config) RestoreConfig {
+	return cfg.Restore
 }

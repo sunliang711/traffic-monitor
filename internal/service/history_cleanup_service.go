@@ -77,9 +77,14 @@ func NewHistoryCleanupScheduler(
 	}
 }
 
-func RegisterHistoryCleanupScheduler(lifecycle fx.Lifecycle, scheduler *HistoryCleanupScheduler) {
+func RegisterHistoryCleanupScheduler(lifecycle fx.Lifecycle, scheduler *HistoryCleanupScheduler, restoreConfig config.RestoreConfig) {
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startContext context.Context) error {
+			if restoreConfig.Enabled() {
+				scheduler.log.Info().Msg("history cleanup scheduler disabled in restore mode")
+				return nil
+			}
+
 			if !scheduler.cfg.Enabled {
 				scheduler.log.Info().Msg("history cleanup scheduler disabled")
 				return nil

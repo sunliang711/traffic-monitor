@@ -11,5 +11,7 @@ func defaultEnvBindings() []EnvBinding {
 		{Key: "security.app_master_key", EnvName: "APP_MASTER_KEY"},
 		{Key: "bootstrap.init_admin_username", EnvName: "INIT_ADMIN_USERNAME"},
 		{Key: "bootstrap.init_admin_password", EnvName: "INIT_ADMIN_PASSWORD"},
+		{Key: "restore.mode", EnvName: "RESTORE_MODE"},
+		{Key: "restore.token", EnvName: "RESTORE_TOKEN"},
 	}
 }

@@ -9,6 +9,7 @@ import type {
   LoginFormState,
   MachineFormState,
   NotificationProxyFormState,
+  RestorePasswordFormState,
   SSHKeyGenerateState,
   SSHKeyImportState,
   TabKey,
@@ -50,6 +51,7 @@ import type {
   Machine,
   NotificationChannel,
   NotificationProxy,
+  RestoreStatus,
   SSHKey,
   TelegramTestResponse,
   ThresholdRule,
@@ -87,6 +89,13 @@ const emptyBackupExportForm = () => ({
 const emptyChangePasswordForm = (): ChangePasswordFormState => ({
   currentPassword: "",
   newPassword: "",
+});
+
+const emptyRestorePasswordForm = (): RestorePasswordFormState => ({
+  username: "admin",
+  restoreToken: "",
+  newPassword: "",
+  confirmPassword: "",
 });
 
 const defaultListPageSize = 50;
@@ -227,6 +236,7 @@ function App() {
   const [toast, setToast] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [isRestoreMode, setRestoreMode] = useState(false);
   const [isActionMenuOpen, setActionMenuOpen] = useState(false);
   const [isLanguageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -238,6 +248,7 @@ function App() {
   const [backupImportFileName, setBackupImportFileName] = useState("");
   const [backupImportFile, setBackupImportFile] = useState<EncryptedBackup | null>(null);
   const [passwordForm, setPasswordForm] = useState<ChangePasswordFormState>(emptyChangePasswordForm());
+  const [restorePasswordForm, setRestorePasswordForm] = useState<RestorePasswordFormState>(emptyRestorePasswordForm());
   const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "AD";
   const currentLanguageLabel = language === "zh" ? t("languageChinese") : t("languageEnglish");
   const currentLanguageBadge = language === "zh" ? "中" : "EN";
@@ -368,6 +379,17 @@ function App() {
   }, [selectedThresholdMachineID, profile]);
 
   async function bootstrap() {
+    try {
+      const restoreStatus = await get<RestoreStatus>("/api/v1/restore/status");
+      if (restoreStatus.enabled && restoreStatus.mode === "admin-password") {
+        setRestoreMode(true);
+        setProfile(null);
+        return;
+      }
+    } catch {
+      setRestoreMode(false);
+    }
+
     try {
       const nextProfile = await get<AdminProfile>("/api/v1/auth/profile");
       setProfile(nextProfile);
@@ -554,6 +576,46 @@ function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleRestorePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (Array.from(restorePasswordForm.newPassword).length < 6) {
+      setToast("");
+      setError(t("passwordMinLength"));
+      return;
+    }
+
+    if (restorePasswordForm.newPassword !== restorePasswordForm.confirmPassword) {
+      setToast("");
+      setError(t("restorePasswordMismatch"));
+      return;
+    }
+
+    await submitAction(async () => {
+      await post<null, { username: string; restore_token: string; new_password: string }>(
+        "/api/v1/restore/admin-password",
+        {
+          username: restorePasswordForm.username,
+          restore_token: restorePasswordForm.restoreToken,
+          new_password: restorePasswordForm.newPassword,
+        },
+      );
+      setRestorePasswordForm(emptyRestorePasswordForm());
+      setToast(t("restorePasswordSuccess"));
+    }, (submitError) => {
+      if (submitError instanceof Error && submitError.message === "restore token is invalid") {
+        setError(t("restoreTokenInvalid"));
+        return;
+      }
+
+      if (submitError instanceof Error && submitError.message === "admin not found") {
+        setError(t("restoreAdminNotFound"));
+        return;
+      }
+
+      setError(toErrorMessage(submitError, language));
+    });
   }
 
   async function handleLogout() {
@@ -1471,6 +1533,83 @@ function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (isRestoreMode) {
+    return (
+      <main className="app-shell auth-shell">
+        <section className="panel auth-panel restore-panel">
+          <div className="app-brand">
+            <AppIcon />
+            <p className="eyebrow">traffic-monitor</p>
+          </div>
+          <div className="panel-header-inline auth-header">
+            <div className="auth-copy">
+              <h1 className="panel-title">{t("restorePasswordTitle")}</h1>
+              <p className="muted">{t("restorePasswordDescription")}</p>
+            </div>
+            {renderLanguageMenu()}
+          </div>
+          <form className="form-grid" onSubmit={handleRestorePasswordSubmit}>
+            <label className="field">
+              <span>{t("username")}</span>
+              <input
+                required
+                value={restorePasswordForm.username}
+                onChange={(event) =>
+                  setRestorePasswordForm((current) => ({ ...current, username: event.target.value }))
+                }
+                placeholder="admin"
+              />
+            </label>
+            <label className="field">
+              <span>{t("restoreToken")}</span>
+              <input
+                type="password"
+                required
+                value={restorePasswordForm.restoreToken}
+                onChange={(event) =>
+                  setRestorePasswordForm((current) => ({ ...current, restoreToken: event.target.value }))
+                }
+                placeholder={t("restoreTokenPlaceholder")}
+              />
+            </label>
+            <label className="field">
+              <span>{t("newPassword")}</span>
+              <input
+                type="password"
+                minLength={6}
+                required
+                value={restorePasswordForm.newPassword}
+                onChange={(event) =>
+                  setRestorePasswordForm((current) => ({ ...current, newPassword: event.target.value }))
+                }
+                placeholder={t("newPasswordPlaceholder")}
+              />
+            </label>
+            <label className="field">
+              <span>{t("restoreConfirmPassword")}</span>
+              <input
+                type="password"
+                minLength={6}
+                required
+                value={restorePasswordForm.confirmPassword}
+                onChange={(event) =>
+                  setRestorePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))
+                }
+                placeholder={t("restoreConfirmPasswordPlaceholder")}
+              />
+            </label>
+            <button className="primary-button" disabled={busy} type="submit">
+              {busy ? t("restorePasswordSubmitting") : t("restorePasswordSubmit")}
+            </button>
+          </form>
+          {toast ? <p className="message success">{toast}</p> : null}
+          {error ? <p className="message error">{error}</p> : null}
+          <p className="restore-note">{t("restorePasswordAfterSuccess")}</p>
+        </section>
+      </main>
+    );
   }
 
   if (!profile) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type stubAdminStore struct {
@@ -22,7 +23,7 @@ type stubAdminStore struct {
 func (store *stubAdminStore) GetByID(_ context.Context, adminID uint) (*model.Admin, error) {
 	admin, ok := store.adminByID[adminID]
 	if !ok {
-		return nil, ErrAdminNotFound
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	return admin, nil
@@ -31,7 +32,7 @@ func (store *stubAdminStore) GetByID(_ context.Context, adminID uint) (*model.Ad
 func (store *stubAdminStore) GetByUsername(_ context.Context, username string) (*model.Admin, error) {
 	admin, ok := store.adminByUsername[username]
 	if !ok {
-		return nil, ErrAdminNotFound
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	return admin, nil
@@ -176,5 +177,58 @@ func TestAuthServiceChangePassword_NewPasswordTooShort(t *testing.T) {
 	}
 
 	err := service.ChangePassword(context.Background(), 1, "old-secret", "short")
+	require.ErrorIs(t, err, ErrPasswordTooShort)
+}
+
+func TestAuthServiceResetPasswordByUsername(t *testing.T) {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("old-secret"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	store := &stubAdminStore{
+		adminByID: map[uint]*model.Admin{
+			1: {
+				Base:         model.Base{ID: 1},
+				Username:     "admin",
+				PasswordHash: string(passwordHash),
+			},
+		},
+		adminByUsername: map[string]*model.Admin{
+			"admin": {
+				Base:         model.Base{ID: 1},
+				Username:     "admin",
+				PasswordHash: string(passwordHash),
+			},
+		},
+	}
+
+	service := &AuthService{
+		adminStore: store,
+	}
+
+	err = service.ResetPasswordByUsername(context.Background(), "admin", "new-secret")
+	require.NoError(t, err)
+	require.Equal(t, uint(1), store.updatedAdminID)
+	require.NotEmpty(t, store.updatedPassword)
+	require.NotEqual(t, string(passwordHash), store.updatedPassword)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(store.updatedPassword), []byte("new-secret")))
+}
+
+func TestAuthServiceResetPasswordByUsername_AdminNotFound(t *testing.T) {
+	service := &AuthService{
+		adminStore: &stubAdminStore{
+			adminByUsername: map[string]*model.Admin{},
+		},
+	}
+
+	err := service.ResetPasswordByUsername(context.Background(), "admin", "new-secret")
+	require.ErrorIs(t, err, ErrAdminNotFound)
+}
+
+func TestAuthServiceResetPasswordByUsername_NewPasswordTooShort(t *testing.T) {
+	service := &AuthService{
+		adminStore: &stubAdminStore{},
+	}
+
+	err := service.ResetPasswordByUsername(context.Background(), "admin", "short")
 	require.ErrorIs(t, err, ErrPasswordTooShort)
 }

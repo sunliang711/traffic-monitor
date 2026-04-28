@@ -42,6 +42,10 @@ app_master_key = ""
 init_admin_username = ""
 init_admin_password = ""
 
+[restore]
+mode = ""
+token = ""
+
 [history_cleanup]
 enabled = true
 interval = "1h"

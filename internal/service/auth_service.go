@@ -112,6 +112,36 @@ func (service *AuthService) ChangePassword(ctx context.Context, adminID uint, cu
 	return nil
 }
 
+func (service *AuthService) ResetPasswordByUsername(ctx context.Context, username string, newPassword string) error {
+	if utf8.RuneCountInString(newPassword) < minAdminPasswordLength {
+		return ErrPasswordTooShort
+	}
+
+	admin, err := service.adminStore.GetByUsername(ctx, username)
+	if err != nil {
+		if repo.IsRecordNotFound(err) {
+			return ErrAdminNotFound
+		}
+
+		return fmt.Errorf("get admin for password reset: %w", err)
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash reset admin password: %w", err)
+	}
+
+	if err := service.adminStore.UpdatePasswordHash(ctx, admin.ID, string(passwordHash)); err != nil {
+		if repo.IsRecordNotFound(err) {
+			return ErrAdminNotFound
+		}
+
+		return fmt.Errorf("update reset admin password hash: %w", err)
+	}
+
+	return nil
+}
+
 func (service *AuthService) EnsureBootstrapAdmin(ctx context.Context) (bool, error) {
 	if service.bootstrapConfig.InitAdminUsername == "" {
 		return false, nil

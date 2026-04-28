@@ -43,6 +43,9 @@ func LogSanitizedConfig(log zerolog.Logger, cfg Config) {
 		Bool("security_app_master_key_configured", strings.TrimSpace(cfg.Security.AppMasterKey) != "").
 		Bool("bootstrap_admin_enabled", strings.TrimSpace(cfg.Bootstrap.InitAdminUsername) != "" && strings.TrimSpace(cfg.Bootstrap.InitAdminPassword) != "").
 		Str("bootstrap_admin_username", maskBootstrapUsername(cfg.Bootstrap.InitAdminUsername)).
+		Bool("restore_enabled", cfg.Restore.Enabled()).
+		Str("restore_mode", cfg.Restore.Mode).
+		Bool("restore_token_configured", strings.TrimSpace(cfg.Restore.Token) != "").
 		Msg("sanitized config loaded")
 }
 

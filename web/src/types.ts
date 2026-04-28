@@ -3,6 +3,11 @@ export type AdminProfile = {
   username: string;
 };
 
+export type RestoreStatus = {
+  enabled: boolean;
+  mode: string;
+};
+
 export type SSHKey = {
   id: number;
   name: string;

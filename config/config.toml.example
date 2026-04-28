@@ -44,3 +44,8 @@ app_master_key = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 # Prefer environment variables INIT_ADMIN_USERNAME and INIT_ADMIN_PASSWORD in runtime.
 init_admin_username = "admin"
 init_admin_password = "replace-with-admin-password"
+
+[restore]
+# Set mode to "admin-password" and token to a strong random value only when password recovery is needed.
+mode = ""
+token = ""
