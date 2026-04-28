@@ -4,6 +4,8 @@ export type ApiResponse<T> = {
   message: string;
 };
 
+export const AUTH_EXPIRED_EVENT = "traffic-monitor:auth-expired";
+
 type QueryValue = string | number | boolean | null | undefined;
 
 export function withQuery(path: string, params: Record<string, QueryValue>) {
@@ -39,6 +41,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && payload?.message === "unauthorized") {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      }
+
+      throw new Error("");
+    }
+
     throw new Error(payload?.message || `request failed: ${response.status}`);
   }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { del, get, patch, post, put, withQuery } from "./api";
+import { AUTH_EXPIRED_EVENT, del, get, patch, post, put, withQuery } from "./api";
 import OverviewTab from "./components/OverviewTab";
 import { useI18n } from "./lib/i18n";
 import type {
@@ -353,14 +353,31 @@ function App() {
   }, [activeTab, t]);
 
   useEffect(() => {
-    void bootstrap();
-  }, []);
-
-  useEffect(() => {
     setActionMenuOpen(false);
     setAccountMenuOpen(false);
     setLanguageMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    function handleAuthExpired() {
+      setProfile(null);
+      setToast("");
+      setError("");
+      setActionMenuOpen(false);
+      setAccountMenuOpen(false);
+      setLanguageMenuOpen(false);
+      setBackupModalMode(null);
+      setPasswordModalOpen(false);
+      navigate("/login", { replace: true });
+    }
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+  }, [navigate]);
+
+  useEffect(() => {
+    void bootstrap();
+  }, []);
 
   useEffect(() => {
     if (!profile) {
