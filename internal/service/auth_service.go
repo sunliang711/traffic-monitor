@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"unicode/utf8"
@@ -20,7 +22,18 @@ var (
 	ErrPasswordTooShort   = errors.New("password too short")
 )
 
-const minAdminPasswordLength = 6
+const (
+	minAdminPasswordLength          = 6
+	defaultBootstrapAdminUsername   = "admin"
+	generatedBootstrapPasswordBytes = 24
+)
+
+type BootstrapAdminResult struct {
+	Created           bool
+	Username          string
+	Password          string
+	GeneratedPassword bool
+}
 
 type AdminStore interface {
 	GetByID(ctx context.Context, adminID uint) (*model.Admin, error)
@@ -142,33 +155,66 @@ func (service *AuthService) ResetPasswordByUsername(ctx context.Context, usernam
 	return nil
 }
 
-func (service *AuthService) EnsureBootstrapAdmin(ctx context.Context) (bool, error) {
-	if service.bootstrapConfig.InitAdminUsername == "" {
-		return false, nil
+func (service *AuthService) EnsureBootstrapAdmin(ctx context.Context) (BootstrapAdminResult, error) {
+	username := service.bootstrapConfig.InitAdminUsername
+	password := service.bootstrapConfig.InitAdminPassword
+	generatePassword := false
+	if username == "" {
+		if password != "" {
+			return BootstrapAdminResult{}, nil
+		}
+		username = defaultBootstrapAdminUsername
+		generatePassword = true
 	}
 
-	exists, err := service.adminStore.ExistsByUsername(ctx, service.bootstrapConfig.InitAdminUsername)
+	exists, err := service.adminStore.ExistsByUsername(ctx, username)
 	if err != nil {
-		return false, fmt.Errorf("check bootstrap admin: %w", err)
+		return BootstrapAdminResult{}, fmt.Errorf("check bootstrap admin: %w", err)
 	}
 
 	if exists {
-		return false, nil
+		return BootstrapAdminResult{Username: username}, nil
 	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(service.bootstrapConfig.InitAdminPassword), bcrypt.DefaultCost)
+	if generatePassword {
+		generatedPassword, err := generateBootstrapAdminPassword()
+		if err != nil {
+			return BootstrapAdminResult{}, err
+		}
+		password = generatedPassword
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return false, fmt.Errorf("hash bootstrap admin password: %w", err)
+		return BootstrapAdminResult{}, fmt.Errorf("hash bootstrap admin password: %w", err)
 	}
 
 	admin := &model.Admin{
-		Username:     service.bootstrapConfig.InitAdminUsername,
+		Username:     username,
 		PasswordHash: string(passwordHash),
 	}
 
 	if err := service.adminStore.Create(ctx, admin); err != nil {
-		return false, fmt.Errorf("create bootstrap admin: %w", err)
+		return BootstrapAdminResult{}, fmt.Errorf("create bootstrap admin: %w", err)
 	}
 
-	return true, nil
+	result := BootstrapAdminResult{
+		Created:           true,
+		Username:          username,
+		GeneratedPassword: generatePassword,
+	}
+	if generatePassword {
+		result.Password = password
+	}
+
+	return result, nil
+}
+
+func generateBootstrapAdminPassword() (string, error) {
+	passwordBytes := make([]byte, generatedBootstrapPasswordBytes)
+	if _, err := rand.Read(passwordBytes); err != nil {
+		return "", fmt.Errorf("generate bootstrap admin password: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(passwordBytes), nil
 }

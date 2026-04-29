@@ -41,7 +41,7 @@ command_timeout = "10s"
 app_master_key = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 
 [bootstrap]
-# Prefer environment variables INIT_ADMIN_USERNAME and INIT_ADMIN_PASSWORD in runtime.
+# 运行时优先使用环境变量 INIT_ADMIN_USERNAME 和 INIT_ADMIN_PASSWORD；两者都留空时会自动创建 admin 并打印随机密码。
 init_admin_username = "admin"
 init_admin_password = "replace-with-admin-password"
 

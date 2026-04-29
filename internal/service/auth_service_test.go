@@ -114,12 +114,62 @@ func TestAuthServiceEnsureBootstrapAdmin(t *testing.T) {
 		},
 	}
 
-	created, err := service.EnsureBootstrapAdmin(context.Background())
+	result, err := service.EnsureBootstrapAdmin(context.Background())
 	require.NoError(t, err)
-	require.True(t, created)
+	require.True(t, result.Created)
+	require.Equal(t, "admin", result.Username)
+	require.False(t, result.GeneratedPassword)
+	require.Empty(t, result.Password)
 	require.Len(t, store.createdAdmins, 1)
 	require.Equal(t, "admin", store.createdAdmins[0].Username)
 	require.NotEmpty(t, store.createdAdmins[0].PasswordHash)
+}
+
+func TestAuthServiceEnsureBootstrapAdmin_GeneratesDefaultAdminWhenConfigEmpty(t *testing.T) {
+	store := &stubAdminStore{
+		adminByUsername: map[string]*model.Admin{},
+	}
+
+	service := &AuthService{
+		adminStore: store,
+	}
+
+	result, err := service.EnsureBootstrapAdmin(context.Background())
+	require.NoError(t, err)
+	require.True(t, result.Created)
+	require.Equal(t, "admin", result.Username)
+	require.True(t, result.GeneratedPassword)
+	require.NotEmpty(t, result.Password)
+	require.Len(t, store.createdAdmins, 1)
+	require.Equal(t, "admin", store.createdAdmins[0].Username)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(store.createdAdmins[0].PasswordHash), []byte(result.Password)))
+}
+
+func TestAuthServiceEnsureBootstrapAdmin_SkipsExistingDefaultAdmin(t *testing.T) {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	store := &stubAdminStore{
+		adminByUsername: map[string]*model.Admin{
+			"admin": {
+				Base:         model.Base{ID: 1},
+				Username:     "admin",
+				PasswordHash: string(passwordHash),
+			},
+		},
+	}
+
+	service := &AuthService{
+		adminStore: store,
+	}
+
+	result, err := service.EnsureBootstrapAdmin(context.Background())
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, "admin", result.Username)
+	require.False(t, result.GeneratedPassword)
+	require.Empty(t, result.Password)
+	require.Empty(t, store.createdAdmins)
 }
 
 func TestAuthServiceChangePassword(t *testing.T) {

@@ -108,8 +108,8 @@ cp config/config.toml.example config/config.toml
 
 #### `[bootstrap]`
 
-- `init_admin_username`：首次启动时初始化管理员用户名
-- `init_admin_password`：首次启动时初始化管理员密码
+- `init_admin_username`：首次启动时初始化管理员用户名；留空时默认使用 `admin`
+- `init_admin_password`：首次启动时初始化管理员密码；留空时自动生成随机密码并打印到启动日志
 
 #### `[restore]`
 
@@ -118,7 +118,8 @@ cp config/config.toml.example config/config.toml
 
 说明：
 
-- `bootstrap.init_admin_username` 和 `bootstrap.init_admin_password` 必须同时配置，或同时留空
+- `bootstrap.init_admin_username` 和 `bootstrap.init_admin_password` 必须同时配置，或同时留空；同时留空时会自动创建 `admin` 并在首次创建成功后输出随机密码到日志
+- 使用自动生成的随机密码首次登录后，建议立即修改管理员密码
 - `session.secret`、`security.app_master_key`、初始化管理员密码、恢复 Token 等敏感信息，建议优先放在 `config/private.toml` 或环境变量中
 
 ## 日志格式说明
@@ -288,8 +289,8 @@ POSTGRES_PASSWORD=replace-with-strong-postgres-password
 | `POSTGRES_PASSWORD` | 是 | 是 | `traffic_monitor` | PostgreSQL 密码，生产环境必须修改 |
 | `SESSION_SECRET` | 是 | 是 | 无 | Session 签名密钥，建议使用 `openssl rand -hex 32` 生成 |
 | `APP_MASTER_KEY` | 是 | 是 | 无 | 敏感数据加密主密钥，必须是 base64 编码后的 32 字节密钥 |
-| `INIT_ADMIN_USERNAME` | 首次部署需要 | 否 | `admin` | 首次启动时初始化管理员用户名 |
-| `INIT_ADMIN_PASSWORD` | 首次部署需要 | 是 | 无 | 首次启动时初始化管理员密码 |
+| `INIT_ADMIN_USERNAME` | 否 | 否 | `admin` | 首次启动时初始化管理员用户名 |
+| `INIT_ADMIN_PASSWORD` | 否 | 是 | 自动生成 | 首次启动时初始化管理员密码；未配置时会生成随机密码并打印到启动日志 |
 | `RESTORE_MODE` | 否 | 否 | 无 | 忘记管理员密码时临时设置为 `admin-password` |
 | `RESTORE_TOKEN` | 启用恢复模式时需要 | 是 | 无 | 恢复模式使用的一次性 Token，启动后 5 分钟内有效，建议使用 `openssl rand -hex 32` 生成 |
 | `LOG_LEVEL` | 否 | 否 | `info` | 日志级别，例如 `debug` / `info` / `warn` / `error` |
@@ -299,7 +300,8 @@ POSTGRES_PASSWORD=replace-with-strong-postgres-password
 说明：
 
 - `APP_MASTER_KEY` 一旦用于加密 SSH Key 等敏感数据，后续不能随意更换，否则已有密文无法解密。
-- `INIT_ADMIN_USERNAME` 和 `INIT_ADMIN_PASSWORD` 必须同时配置或同时留空。
+- `INIT_ADMIN_USERNAME` 和 `INIT_ADMIN_PASSWORD` 必须同时配置或同时留空；同时留空时使用 `admin` 和启动日志中的随机密码首次登录。
+- 使用自动生成的随机密码首次登录后，建议立即修改管理员密码。
 - `RESTORE_MODE` 仅用于恢复密码，`RESTORE_TOKEN` 在服务启动后 5 分钟内有效；重置成功后应删除 `RESTORE_MODE` 和 `RESTORE_TOKEN` 并重启服务。
 - `POSTGRES_DSN` 在 `docker-compose.yml` 中会根据 PostgreSQL 配置自动拼接，通常不需要在 `.env` 中手动配置。
 - 如果只允许本机访问数据库，可以设置 `POSTGRES_PORT=127.0.0.1:5432`，或移除 `postgres` 服务的 `ports` 配置。
@@ -411,7 +413,7 @@ curl http://127.0.0.1:8086/healthz
 ## 关键说明
 
 - 服务启动时会自动执行数据库 migrate
-- 首次启动会根据环境变量或配置文件自动初始化管理员
+- 首次启动会根据环境变量、配置文件或自动生成的随机密码初始化管理员
 - 前端会在 Docker 构建阶段打包并嵌入 Go 二进制
 - `APP_MASTER_KEY` 必须是 base64 编码后的 32 字节密钥
 - `config/private.toml` 适合存放本地私有配置，不建议提交真实敏感信息
