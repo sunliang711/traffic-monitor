@@ -13,7 +13,7 @@ import (
 )
 
 func NewLogger(cfg config.LogConfig) zerolog.Logger {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.TimeFieldFormat = time.RFC3339
 	zerolog.CallerMarshalFunc = func(_ uintptr, file string, line int) string {
 		baseDir := filepath.Base(filepath.Dir(file))
 		return baseDir + "/" + filepath.Base(file) + ":" + strconv.Itoa(line)
