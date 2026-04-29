@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"traffic-monitor/internal/config"
 	"traffic-monitor/internal/dto"
@@ -13,8 +15,14 @@ import (
 	"github.com/gorilla/sessions"
 )
 
+type AdminAuthService interface {
+	Authenticate(ctx context.Context, username string, password string) (dto.AdminProfileResp, error)
+	GetProfile(ctx context.Context, adminID uint) (dto.AdminProfileResp, error)
+	ChangePassword(ctx context.Context, adminID uint, currentPassword string, newPassword string) error
+}
+
 type AuthHandler struct {
-	authService   *service.AuthService
+	authService   AdminAuthService
 	sessionStore  *sessions.CookieStore
 	sessionConfig config.SessionConfig
 }
@@ -95,6 +103,7 @@ func (handler *AuthHandler) Login(ctx *gin.Context) {
 	}
 
 	session.Values[middleware.SessionAdminKey()] = profile.ID
+	session.Values[middleware.SessionExpiresAtKey()] = time.Now().Add(handler.sessionConfig.MaxAge).Unix()
 	if err := session.Save(ctx.Request, ctx.Writer); err != nil {
 		ctx.JSON(http.StatusInternalServerError, dto.Response{
 			Code:    http.StatusInternalServerError,
