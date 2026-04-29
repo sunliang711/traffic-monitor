@@ -23,8 +23,8 @@ func NewAlertHandler(alertService *service.AlertService) *AlertHandler {
 	}
 }
 
-func (handler *AlertHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup) {
-	authenticatedGroup.GET("/alerts", handler.ListAlerts)
+func (handler *AlertHandler) RegisterRoutes(readGroup *gin.RouterGroup, authenticatedGroup *gin.RouterGroup) {
+	readGroup.GET("/alerts", handler.ListAlerts)
 	authenticatedGroup.GET("/notification-channels", handler.ListNotificationChannels)
 	authenticatedGroup.PUT("/notification-channels/webhook", handler.UpsertWebhookChannel)
 	authenticatedGroup.POST("/notification-channels/webhook/test", handler.TestWebhookChannel)

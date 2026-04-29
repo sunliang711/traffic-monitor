@@ -23,8 +23,8 @@ func NewTrafficSampleHandler(trafficCollectionService *service.TrafficCollection
 	}
 }
 
-func (handler *TrafficSampleHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup) {
-	authenticatedGroup.GET("/traffic-samples", handler.ListSamples)
+func (handler *TrafficSampleHandler) RegisterRoutes(readGroup *gin.RouterGroup, authenticatedGroup *gin.RouterGroup) {
+	readGroup.GET("/traffic-samples", handler.ListSamples)
 	authenticatedGroup.POST("/traffic-samples/cleanup", handler.CleanupHistory)
 	authenticatedGroup.POST("/system/collect-now", handler.CollectNow)
 }

@@ -24,11 +24,23 @@ type ProfileService interface {
 	GetProfile(ctx context.Context, adminID uint) (dto.AdminProfileResp, error)
 }
 
+type GuestModeService interface {
+	IsGuestModeEnabled(ctx context.Context) (bool, error)
+}
+
 type AuthMiddleware struct {
 	authService   ProfileService
 	sessionStore  *sessions.CookieStore
 	sessionConfig config.SessionConfig
 }
+
+type adminAuthStatus int
+
+const (
+	adminAuthOK adminAuthStatus = iota
+	adminAuthUnauthorized
+	adminAuthInternalError
+)
 
 func NewAuthMiddleware(authService *service.AuthService, sessionStore *sessions.CookieStore, sessionConfig config.SessionConfig) *AuthMiddleware {
 	return &AuthMiddleware{
@@ -40,55 +52,80 @@ func NewAuthMiddleware(authService *service.AuthService, sessionStore *sessions.
 
 func (middleware *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		session, err := middleware.sessionStore.Get(ctx.Request, middleware.sessionConfig.CookieName)
+		adminID, status := middleware.authenticateAdmin(ctx)
+		switch status {
+		case adminAuthOK:
+			ctx.Set(currentAdminIDKey, adminID)
+			ctx.Next()
+		case adminAuthUnauthorized:
+			abortUnauthorized(ctx)
+		case adminAuthInternalError:
+			internalServerError(ctx)
+		}
+	}
+}
+
+func (middleware *AuthMiddleware) RequireAdminOrGuest(guestModeService GuestModeService) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		adminID, status := middleware.authenticateAdmin(ctx)
+		switch status {
+		case adminAuthOK:
+			ctx.Set(currentAdminIDKey, adminID)
+			ctx.Next()
+			return
+		case adminAuthInternalError:
+			internalServerError(ctx)
+			return
+		}
+
+		enabled, err := guestModeService.IsGuestModeEnabled(ctx.Request.Context())
 		if err != nil {
+			internalServerError(ctx)
+			return
+		}
+		if !enabled {
 			abortUnauthorized(ctx)
 			return
 		}
 
-		adminID, ok := sessionAdminID(session.Values[currentAdminSessionKey])
-		if !ok || adminID == 0 {
-			abortUnauthorized(ctx)
-			return
-		}
-
-		now := time.Now()
-		expiresAt, ok := sessionExpiresAt(session.Values[sessionExpiresAtKey])
-		if !ok || !expiresAt.After(now) {
-			abortUnauthorized(ctx)
-			return
-		}
-
-		if _, err := middleware.authService.GetProfile(ctx.Request.Context(), adminID); err != nil {
-			if errors.Is(err, service.ErrAdminNotFound) {
-				abortUnauthorized(ctx)
-				return
-			}
-
-			ctx.JSON(http.StatusInternalServerError, dto.Response{
-				Code:    http.StatusInternalServerError,
-				Data:    nil,
-				Message: "internal server error",
-			})
-			return
-		}
-
-		if shouldRenewSession(now, expiresAt, middleware.sessionConfig.MaxAge) {
-			// expires_at 存放在签名 Cookie 中，用于服务端判断滑动过期。
-			session.Values[sessionExpiresAtKey] = now.Add(middleware.sessionConfig.MaxAge).Unix()
-			if err := session.Save(ctx.Request, ctx.Writer); err != nil {
-				ctx.JSON(http.StatusInternalServerError, dto.Response{
-					Code:    http.StatusInternalServerError,
-					Data:    nil,
-					Message: "internal server error",
-				})
-				return
-			}
-		}
-
-		ctx.Set(currentAdminIDKey, adminID)
 		ctx.Next()
 	}
+}
+
+func (middleware *AuthMiddleware) authenticateAdmin(ctx *gin.Context) (uint, adminAuthStatus) {
+	session, err := middleware.sessionStore.Get(ctx.Request, middleware.sessionConfig.CookieName)
+	if err != nil {
+		return 0, adminAuthUnauthorized
+	}
+
+	adminID, ok := sessionAdminID(session.Values[currentAdminSessionKey])
+	if !ok || adminID == 0 {
+		return 0, adminAuthUnauthorized
+	}
+
+	now := time.Now()
+	expiresAt, ok := sessionExpiresAt(session.Values[sessionExpiresAtKey])
+	if !ok || !expiresAt.After(now) {
+		return 0, adminAuthUnauthorized
+	}
+
+	if _, err := middleware.authService.GetProfile(ctx.Request.Context(), adminID); err != nil {
+		if errors.Is(err, service.ErrAdminNotFound) {
+			return 0, adminAuthUnauthorized
+		}
+
+		return 0, adminAuthInternalError
+	}
+
+	if shouldRenewSession(now, expiresAt, middleware.sessionConfig.MaxAge) {
+		// expires_at 存放在签名 Cookie 中，用于服务端判断滑动过期。
+		session.Values[sessionExpiresAtKey] = now.Add(middleware.sessionConfig.MaxAge).Unix()
+		if err := session.Save(ctx.Request, ctx.Writer); err != nil {
+			return 0, adminAuthInternalError
+		}
+	}
+
+	return adminID, adminAuthOK
 }
 
 func CurrentAdminID(ctx *gin.Context) (uint, bool) {
@@ -106,6 +143,14 @@ func abortUnauthorized(ctx *gin.Context) {
 		Code:    http.StatusUnauthorized,
 		Data:    nil,
 		Message: "unauthorized",
+	})
+}
+
+func internalServerError(ctx *gin.Context) {
+	ctx.AbortWithStatusJSON(http.StatusInternalServerError, dto.Response{
+		Code:    http.StatusInternalServerError,
+		Data:    nil,
+		Message: "internal server error",
 	})
 }
 

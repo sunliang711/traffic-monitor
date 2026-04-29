@@ -11,6 +11,7 @@ type OverviewTabProps = {
   samplesTotal: number;
   alertsTotal: number;
   collectResults: CollectNowResponse["results"];
+  readOnly?: boolean;
   onNavigate: (tab: OverviewTabKey) => void;
 };
 
@@ -44,24 +45,28 @@ export default function OverviewTab(props: OverviewTabProps) {
       </section>
 
       <div className="grid overview-grid">
-        <StatCard
-          label={t("overviewSSHKeysLabel")}
-          value={String(props.sshKeys.length)}
-          help={t("overviewSSHKeysHelp")}
-          onClick={() => props.onNavigate("sshKeys")}
-        />
+        {props.readOnly ? null : (
+          <StatCard
+            label={t("overviewSSHKeysLabel")}
+            value={String(props.sshKeys.length)}
+            help={t("overviewSSHKeysHelp")}
+            onClick={() => props.onNavigate("sshKeys")}
+          />
+        )}
         <StatCard
           label={t("overviewMachinesLabel")}
           value={String(props.machines.length)}
           help={t("overviewMachinesHelp", { count: enabledMachines })}
           onClick={() => props.onNavigate("machines")}
         />
-        <StatCard
-          label={t("overviewNotificationsLabel")}
-          value={String(enabledChannels)}
-          help={t("overviewNotificationsHelp")}
-          onClick={() => props.onNavigate("notifications")}
-        />
+        {props.readOnly ? null : (
+          <StatCard
+            label={t("overviewNotificationsLabel")}
+            value={String(enabledChannels)}
+            help={t("overviewNotificationsHelp")}
+            onClick={() => props.onNavigate("notifications")}
+          />
+        )}
         <StatCard
           label={t("overviewSamplesLabel")}
           value={String(props.samplesTotal)}

@@ -60,6 +60,7 @@ type SamplesPageProps = {
   page: number;
   pageSize: number;
   collectResults: CollectNowResponse["results"];
+  readOnly?: boolean;
   onSelectMachine: (machineID: number | null) => void | Promise<void>;
   onSelectPeriodType: (periodType: string) => void | Promise<void>;
   onPageChange: (page: number) => void | Promise<void>;
@@ -249,26 +250,28 @@ export default function SamplesPage(props: SamplesPageProps) {
               <option value="daily">{formatPeriodType("daily", language)}</option>
             </select>
           </div>
-          <div className="action-row sample-collect-actions">
-            <button
-              className="secondary-button"
-              disabled={props.busy}
-              onClick={props.onCollectAllMachines}
-              type="button"
-            >
-              {t("collectAllMachines")}
-            </button>
-            {props.selectedMachineID ? (
+          {props.readOnly ? null : (
+            <div className="action-row sample-collect-actions">
               <button
                 className="secondary-button"
                 disabled={props.busy}
-                onClick={() => props.onCollectCurrentMachine(props.selectedMachineID!)}
+                onClick={props.onCollectAllMachines}
                 type="button"
               >
-                {t("samplesCollectCurrentMachine")}
+                {t("collectAllMachines")}
               </button>
-            ) : null}
-          </div>
+              {props.selectedMachineID ? (
+                <button
+                  className="secondary-button"
+                  disabled={props.busy}
+                  onClick={() => props.onCollectCurrentMachine(props.selectedMachineID!)}
+                  type="button"
+                >
+                  {t("samplesCollectCurrentMachine")}
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
 
         {props.samples.length === 0 ? (
@@ -381,38 +384,40 @@ export default function SamplesPage(props: SamplesPageProps) {
         )}
       </section>
 
-      <section className="panel section-panel">
-        <div className="section-intro">
-          <div>
-            <h3 className="panel-title">{t("samplesRecentResults")}</h3>
+      {props.readOnly ? null : (
+        <section className="panel section-panel">
+          <div className="section-intro">
+            <div>
+              <h3 className="panel-title">{t("samplesRecentResults")}</h3>
+            </div>
           </div>
-        </div>
-        {props.collectResults.length === 0 ? (
-          <EmptyState title={t("samplesResultsEmptyTitle")} description={t("samplesResultsEmptyDescription")} />
-        ) : (
-          <div className="list-block card-list result-list">
-            {props.collectResults.map((result) => {
-              const machine = machineDisplay(props.machineOptions, result.machine_id, language);
+          {props.collectResults.length === 0 ? (
+            <EmptyState title={t("samplesResultsEmptyTitle")} description={t("samplesResultsEmptyDescription")} />
+          ) : (
+            <div className="list-block card-list result-list">
+              {props.collectResults.map((result) => {
+                const machine = machineDisplay(props.machineOptions, result.machine_id, language);
 
-              return (
-                <article className="card result-card" key={`${result.machine_id}-${result.status}`}>
-                  <div className="card-header">
-                    <div className="machine-cell">
-                      <strong>{machine.primary}</strong>
-                      {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
+                return (
+                  <article className="card result-card" key={`${result.machine_id}-${result.status}`}>
+                    <div className="card-header">
+                      <div className="machine-cell">
+                        <strong>{machine.primary}</strong>
+                        {machine.secondary ? <span className="machine-host">{machine.secondary}</span> : null}
+                      </div>
+                      <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
+                        {formatStatusText(result.status, language)}
+                      </span>
                     </div>
-                    <span className={`status-badge ${result.status === "success" ? "ok" : "error"}`}>
-                      {formatStatusText(result.status, language)}
-                    </span>
-                  </div>
-                  <p className="card-meta">{t("samplesSampleCount", { count: result.sample_count })}</p>
-                  {result.error ? <p className="card-meta">{t("samplesError", { error: result.error })}</p> : null}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                    <p className="card-meta">{t("samplesSampleCount", { count: result.sample_count })}</p>
+                    {result.error ? <p className="card-meta">{t("samplesError", { error: result.error })}</p> : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

@@ -24,10 +24,10 @@ func NewMachineHandler(machineService *service.MachineService, log zerolog.Logge
 	}
 }
 
-func (handler *MachineHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup) {
-	authenticatedGroup.GET("/machines", handler.List)
+func (handler *MachineHandler) RegisterRoutes(readGroup *gin.RouterGroup, authenticatedGroup *gin.RouterGroup) {
+	readGroup.GET("/machines", handler.List)
+	readGroup.GET("/machines/:id", handler.Get)
 	authenticatedGroup.POST("/machines", handler.Create)
-	authenticatedGroup.GET("/machines/:id", handler.Get)
 	authenticatedGroup.PATCH("/machines/:id", handler.Update)
 	authenticatedGroup.DELETE("/machines/:id", handler.Delete)
 	authenticatedGroup.POST("/machines/:id/test-connection", handler.TestConnection)

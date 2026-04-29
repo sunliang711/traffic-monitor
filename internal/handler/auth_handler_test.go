@@ -12,6 +12,8 @@ import (
 	"traffic-monitor/internal/config"
 	"traffic-monitor/internal/dto"
 	"traffic-monitor/internal/middleware"
+	"traffic-monitor/internal/model"
+	"traffic-monitor/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -20,6 +22,23 @@ import (
 type stubAdminAuthService struct {
 	profile dto.AdminProfileResp
 	err     error
+}
+
+type stubSettingsStore struct {
+	guestModeEnabled bool
+}
+
+func (store *stubSettingsStore) GetByKey(_ context.Context, _ string) (*model.AppSetting, error) {
+	if store.guestModeEnabled {
+		return &model.AppSetting{SettingValue: "true"}, nil
+	}
+
+	return &model.AppSetting{SettingValue: "false"}, nil
+}
+
+func (store *stubSettingsStore) Upsert(_ context.Context, setting *model.AppSetting) error {
+	store.guestModeEnabled = setting.SettingValue == "true"
+	return nil
 }
 
 func (service *stubAdminAuthService) Authenticate(_ context.Context, _ string, _ string) (dto.AdminProfileResp, error) {
@@ -81,12 +100,69 @@ func TestAuthHandlerLogin_SetsSessionExpiresAt(t *testing.T) {
 	require.True(t, expiresAt.After(time.Now().Add(sessionConfig.MaxAge-time.Minute)))
 }
 
+func TestRegisterRoutes_RequiresAdminForReadRoutesWhenGuestDisabled(t *testing.T) {
+	engine := newRegisterRoutesTestEngine(false)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/traffic-samples", nil)
+	engine.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+}
+
+func TestRegisterRoutes_KeepsWriteRoutesProtectedWhenGuestEnabled(t *testing.T) {
+	engine := newRegisterRoutesTestEngine(true)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/machines", nil)
+	engine.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+}
+
+func TestRegisterRoutes_KeepsMachineReadRoutesProtectedWhenGuestEnabled(t *testing.T) {
+	engine := newRegisterRoutesTestEngine(true)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/machines", nil)
+	engine.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+}
+
 func newAuthHandlerTestEngine(handler *AuthHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
 	authGroup := engine.Group("/api/v1/auth")
 	authGroup.POST("/login", handler.Login)
+	return engine
+}
+
+func newRegisterRoutesTestEngine(guestModeEnabled bool) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+
+	sessionConfig := authHandlerTestSessionConfig()
+	sessionStore := bootstrap.NewSessionStore(sessionConfig)
+	authMiddleware := middleware.NewAuthMiddleware(&service.AuthService{}, sessionStore, sessionConfig)
+	settingsService := service.NewSettingsService(&stubSettingsStore{guestModeEnabled: guestModeEnabled})
+	engine := gin.New()
+	RegisterRoutes(
+		engine,
+		&HealthHandler{},
+		&AuthHandler{},
+		&RestoreHandler{},
+		&SettingsHandler{},
+		authMiddleware,
+		settingsService,
+		&SSHKeyHandler{},
+		&MachineHandler{},
+		&BackupHandler{},
+		&ThresholdHandler{},
+		&TrafficSampleHandler{},
+		&AlertHandler{},
+		config.RestoreConfig{},
+	)
 	return engine
 }
 

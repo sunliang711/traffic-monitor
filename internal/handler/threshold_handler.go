@@ -20,10 +20,10 @@ func NewThresholdHandler(thresholdService *service.ThresholdService) *ThresholdH
 	}
 }
 
-func (handler *ThresholdHandler) RegisterRoutes(apiGroup *gin.RouterGroup, authenticatedGroup *gin.RouterGroup) {
-	apiGroup.GET("/thresholds/global", handler.ListGlobalRules)
+func (handler *ThresholdHandler) RegisterRoutes(readGroup *gin.RouterGroup, authenticatedGroup *gin.RouterGroup) {
+	readGroup.GET("/thresholds/global", handler.ListGlobalRules)
+	readGroup.GET("/machines/:id/thresholds", handler.ListMachineRules)
 	authenticatedGroup.PUT("/thresholds/global", handler.UpsertGlobalRules)
-	authenticatedGroup.GET("/machines/:id/thresholds", handler.ListMachineRules)
 	authenticatedGroup.PUT("/machines/:id/thresholds", handler.UpsertMachineRules)
 }
 

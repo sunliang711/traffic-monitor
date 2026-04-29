@@ -13,6 +13,7 @@ type ThresholdsPageProps = {
   selectedMachineID: number | null;
   selectedMachine: Machine | null;
   machineOptions: MachineOption[];
+  readOnly?: boolean;
   onSelectMachine: (machineID: number | null) => void;
   onChangeGlobalThresholdForm: (rows: ThresholdFormRow[]) => void;
   onChangeMachineThresholdForm: (rows: ThresholdFormRow[]) => void;
@@ -60,14 +61,16 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
                 </option>
               ))}
             </select>
-            <button
-              className="primary-button"
-              disabled={props.busy || activeSaveDisabled}
-              form="threshold-form"
-              type="submit"
-            >
-              {t("save")}
-            </button>
+            {props.readOnly ? null : (
+              <button
+                className="primary-button"
+                disabled={props.busy || activeSaveDisabled}
+                form="threshold-form"
+                type="submit"
+              >
+                {t("save")}
+              </button>
+            )}
           </div>
         </div>
 
@@ -76,6 +79,7 @@ export default function ThresholdsPage(props: ThresholdsPageProps) {
             mode={isMachineThresholdSelected ? "machine" : "global"}
             rows={activeRows}
             onChange={activeChangeHandler}
+            readOnly={props.readOnly}
           />
         </form>
       </section>

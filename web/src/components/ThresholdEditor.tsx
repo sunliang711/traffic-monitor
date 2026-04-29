@@ -16,6 +16,7 @@ type ThresholdEditorProps = {
   onChange: (rows: ThresholdFormRow[]) => void;
   mode?: "global" | "machine";
   showSource?: boolean;
+  readOnly?: boolean;
 };
 
 function updateRow<Key extends keyof ThresholdFormRow>(
@@ -57,6 +58,7 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
               {isMachineMode ? (
                 <td>
                   <select
+                    disabled={props.readOnly}
                     value={row.strategy}
                     onChange={(event) =>
                       updateRow(
@@ -76,14 +78,14 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
               ) : null}
               <td>
                 <input
-                  disabled={isMachineMode && row.strategy === "inherit"}
+                  disabled={props.readOnly || (isMachineMode && row.strategy === "inherit")}
                   value={row.threshold_value}
                   onChange={(event) => updateRow(props.rows, index, "threshold_value", event.target.value, props.onChange)}
                 />
               </td>
               <td>
                 <select
-                  disabled={isMachineMode && row.strategy === "inherit"}
+                  disabled={props.readOnly || (isMachineMode && row.strategy === "inherit")}
                   value={row.threshold_unit}
                   onChange={(event) =>
                     updateRow(
@@ -109,6 +111,7 @@ export default function ThresholdEditor(props: ThresholdEditorProps) {
                 <td>
                   <input
                     checked={row.enabled}
+                    disabled={props.readOnly}
                     onChange={(event) => updateRow(props.rows, index, "enabled", event.target.checked, props.onChange)}
                     type="checkbox"
                   />

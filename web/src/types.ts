@@ -8,6 +8,10 @@ export type RestoreStatus = {
   mode: string;
 };
 
+export type GuestModeSetting = {
+  enabled: boolean;
+};
+
 export type SSHKey = {
   id: number;
   name: string;

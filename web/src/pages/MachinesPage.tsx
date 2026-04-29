@@ -13,6 +13,7 @@ type MachinesPageProps = {
   editingMachineID: number | null;
   machineForm: MachineFormState;
   machineFormSaved: boolean;
+  readOnly?: boolean;
   sshKeys: SSHKey[];
   machines: Machine[];
   connectionResults: Record<number, ConnectionTestResponse>;
@@ -88,6 +89,7 @@ export default function MachinesPage(props: MachinesPageProps) {
     editingMachineID,
     machineForm,
     machineFormSaved,
+    readOnly,
     sshKeys,
     machines,
     connectionResults,
@@ -262,20 +264,22 @@ export default function MachinesPage(props: MachinesPageProps) {
             </div>
             <p className="section-description">{t("machinesInventoryDescription")}</p>
           </div>
-          <button className="primary-button" onClick={openCreateMachineModal} type="button">
-            {t("machinesCreate")}
-          </button>
+          {readOnly ? null : (
+            <button className="primary-button" onClick={openCreateMachineModal} type="button">
+              {t("machinesCreate")}
+            </button>
+          )}
         </div>
 
         {machines.length === 0 ? (
           <EmptyState
             title={t("machinesEmptyTitle")}
             description={t("machinesEmptyDescription")}
-            action={
+            action={readOnly ? undefined : (
               <button className="primary-button" onClick={openCreateMachineModal} type="button">
                 {t("machinesCreate")}
               </button>
-            }
+            )}
           />
         ) : (
           <>
@@ -288,7 +292,7 @@ export default function MachinesPage(props: MachinesPageProps) {
                     <th>{t("machinesNetworkInterface")}</th>
                     <th>SSH Key</th>
                     <th>{t("machinesCollectEnabled")}</th>
-                    <th>{t("machinesActions")}</th>
+                    {readOnly ? null : <th>{t("machinesActions")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -308,29 +312,31 @@ export default function MachinesPage(props: MachinesPageProps) {
                             {machine.collect_enabled ? t("statusEnabled") : t("statusDisabled")}
                           </span>
                         </td>
-                        <td className="machine-actions-cell">
-                          <div className="machine-actions-stack">
-                            <div className="action-row">
-                              <button className="secondary-button" onClick={() => startEditMachine(machine)} type="button">
-                                {t("machinesEdit")}
-                              </button>
-                              <button
-                                ref={(element) => {
-                                  testButtonRefs.current[machine.id] = element;
-                                }}
-                                className="secondary-button machine-test-button"
-                                disabled={isTestingConnection}
-                                onClick={() => handleTestConnection(machine.id)}
-                                type="button"
-                              >
-                                {isTestingConnection ? t("machinesTesting") : t("machinesTest")}
-                              </button>
-                              <button className="danger-button" onClick={() => void onDeleteMachine(machine.id)} type="button">
-                                {t("machinesDelete")}
-                              </button>
+                        {readOnly ? null : (
+                          <td className="machine-actions-cell">
+                            <div className="machine-actions-stack">
+                              <div className="action-row">
+                                <button className="secondary-button" onClick={() => startEditMachine(machine)} type="button">
+                                  {t("machinesEdit")}
+                                </button>
+                                <button
+                                  ref={(element) => {
+                                    testButtonRefs.current[machine.id] = element;
+                                  }}
+                                  className="secondary-button machine-test-button"
+                                  disabled={isTestingConnection}
+                                  onClick={() => handleTestConnection(machine.id)}
+                                  type="button"
+                                >
+                                  {isTestingConnection ? t("machinesTesting") : t("machinesTest")}
+                                </button>
+                                <button className="danger-button" onClick={() => void onDeleteMachine(machine.id)} type="button">
+                                  {t("machinesDelete")}
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

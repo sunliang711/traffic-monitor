@@ -35,7 +35,7 @@ func NewAuthHandler(authService *service.AuthService, sessionStore *sessions.Coo
 	}
 }
 
-func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, restoreHandler *RestoreHandler, authMiddleware *middleware.AuthMiddleware, sshKeyHandler *SSHKeyHandler, machineHandler *MachineHandler, backupHandler *BackupHandler, thresholdHandler *ThresholdHandler, trafficSampleHandler *TrafficSampleHandler, alertHandler *AlertHandler, restoreConfig config.RestoreConfig) {
+func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandler *AuthHandler, restoreHandler *RestoreHandler, settingsHandler *SettingsHandler, authMiddleware *middleware.AuthMiddleware, settingsService *service.SettingsService, sshKeyHandler *SSHKeyHandler, machineHandler *MachineHandler, backupHandler *BackupHandler, thresholdHandler *ThresholdHandler, trafficSampleHandler *TrafficSampleHandler, alertHandler *AlertHandler, restoreConfig config.RestoreConfig) {
 	engine.GET("/healthz", healthHandler.GetHealth)
 
 	apiGroup := engine.Group("/api/v1")
@@ -52,14 +52,18 @@ func RegisterRoutes(engine *gin.Engine, healthHandler *HealthHandler, authHandle
 	authGroup.GET("/profile", authMiddleware.RequireAdmin(), authHandler.Profile)
 	authGroup.PATCH("/password", authMiddleware.RequireAdmin(), authHandler.ChangePassword)
 
+	readGroup := apiGroup.Group("")
+	readGroup.Use(authMiddleware.RequireAdminOrGuest(settingsService))
+
 	authenticatedGroup := apiGroup.Group("")
 	authenticatedGroup.Use(authMiddleware.RequireAdmin())
+	settingsHandler.RegisterRoutes(authenticatedGroup)
 	sshKeyHandler.RegisterRoutes(authenticatedGroup)
-	machineHandler.RegisterRoutes(authenticatedGroup)
+	machineHandler.RegisterRoutes(authenticatedGroup, authenticatedGroup)
 	backupHandler.RegisterRoutes(authenticatedGroup)
-	thresholdHandler.RegisterRoutes(apiGroup, authenticatedGroup)
-	trafficSampleHandler.RegisterRoutes(authenticatedGroup)
-	alertHandler.RegisterRoutes(authenticatedGroup)
+	thresholdHandler.RegisterRoutes(readGroup, authenticatedGroup)
+	trafficSampleHandler.RegisterRoutes(readGroup, authenticatedGroup)
+	alertHandler.RegisterRoutes(readGroup, authenticatedGroup)
 }
 
 func (handler *AuthHandler) Login(ctx *gin.Context) {

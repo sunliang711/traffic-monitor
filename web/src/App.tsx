@@ -48,6 +48,7 @@ import type {
   CollectNowResponse,
   ConnectionTestResponse,
   EncryptedBackup,
+  GuestModeSetting,
   Machine,
   NotificationChannel,
   NotificationProxy,
@@ -236,6 +237,8 @@ function App() {
   const [toast, setToast] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [isGuest, setGuest] = useState(false);
+  const [guestModeEnabled, setGuestModeEnabled] = useState(false);
   const [isRestoreMode, setRestoreMode] = useState(false);
   const [isActionMenuOpen, setActionMenuOpen] = useState(false);
   const [isLanguageMenuOpen, setLanguageMenuOpen] = useState(false);
@@ -249,7 +252,7 @@ function App() {
   const [backupImportFile, setBackupImportFile] = useState<EncryptedBackup | null>(null);
   const [passwordForm, setPasswordForm] = useState<ChangePasswordFormState>(emptyChangePasswordForm());
   const [restorePasswordForm, setRestorePasswordForm] = useState<RestorePasswordFormState>(emptyRestorePasswordForm());
-  const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "AD";
+  const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "GU";
   const currentLanguageLabel = language === "zh" ? t("languageChinese") : t("languageEnglish");
   const currentLanguageBadge = language === "zh" ? "中" : "EN";
 
@@ -318,6 +321,10 @@ function App() {
     () => machines.map((machine) => ({ value: machine.id, label: `${machine.name} (${machine.host})` })),
     [machines],
   );
+  const visibleTabs = useMemo(
+    () => isGuest ? tabs.filter((tab) => tab.key === "samples" || tab.key === "thresholds" || tab.key === "alerts") : tabs,
+    [isGuest],
+  );
 
   const selectedMachine = useMemo(
     () => machines.find((machine) => machine.id === selectedThresholdMachineID) ?? null,
@@ -361,6 +368,8 @@ function App() {
   useEffect(() => {
     function handleAuthExpired() {
       setProfile(null);
+      setGuest(false);
+      setGuestModeEnabled(false);
       setToast("");
       setError("");
       setActionMenuOpen(false);
@@ -380,20 +389,24 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!profile) {
+    if (!profile && !isGuest) {
       return;
     }
-    void loadProtectedData();
-  }, [profile]);
+    if (profile) {
+      void loadProtectedData();
+      return;
+    }
+    void loadGuestData();
+  }, [profile, isGuest]);
 
   useEffect(() => {
     setMachineThresholdsSaved(true);
-    if (!selectedThresholdMachineID || !profile) {
+    if (!selectedThresholdMachineID || (!profile && !isGuest)) {
       setMachineThresholdForm(emptyThresholdRows());
       return;
     }
     void loadMachineThresholds(selectedThresholdMachineID);
-  }, [selectedThresholdMachineID, profile]);
+  }, [selectedThresholdMachineID, profile, isGuest]);
 
   async function bootstrap() {
     try {
@@ -401,6 +414,8 @@ function App() {
       if (restoreStatus.enabled && restoreStatus.mode === "admin-password") {
         setRestoreMode(true);
         setProfile(null);
+        setGuest(false);
+        setGuestModeEnabled(false);
         return;
       }
     } catch {
@@ -409,19 +424,59 @@ function App() {
 
     try {
       const nextProfile = await get<AdminProfile>("/api/v1/auth/profile");
+      setGuest(false);
       setProfile(nextProfile);
     } catch {
       setProfile(null);
-      await loadPublicData();
+      const guestLoaded = await loadGuestData(undefined, false);
+      setGuest(guestLoaded);
     }
   }
 
-  async function loadPublicData() {
+  async function loadGuestData(options: ProtectedDataLoadOptions = {}, reportError = true) {
+    const nextSamplesPage = options.samplesPage ?? samplesPage;
+    const nextSampleMachineID = null;
+    const nextSamplePeriodType =
+      options.samplePeriodType !== undefined ? options.samplePeriodType : selectedSamplePeriodType;
+    const nextSamplesPageSize = options.samplesPageSize ?? samplesPageSize;
+    const nextAlertsPage = options.alertsPage ?? alertsPage;
+    const nextAlertMachineID = null;
+    const nextAlertsPageSize = options.alertsPageSize ?? alertsPageSize;
+
+    setBusy(true);
+    if (reportError) {
+      setError("");
+    }
     try {
-      const [globalRules] = await Promise.all([get<ThresholdRule[]>("/api/v1/thresholds/global")]);
+      const [globalRules, samplesResp, alertsResp] = await Promise.all([
+        get<ThresholdRule[]>("/api/v1/thresholds/global"),
+        get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID, nextSamplesPageSize, nextSamplePeriodType)),
+        get<AlertList>(alertsPath(nextAlertsPage, nextAlertMachineID, nextAlertsPageSize)),
+      ]);
+
+      setSSHKeys([]);
+      setMachines([]);
       setGlobalThresholdForm(toThresholdFormRows(globalRules));
+      setNotificationChannels([]);
+      setNotificationProxies([]);
+      syncChannelForms([], []);
+      setSamples(samplesResp.items);
+      setSamplesTotal(samplesResp.total);
+      setAlerts(alertsResp.items);
+      setAlertsTotal(alertsResp.total);
+      setGuestModeEnabled(true);
+      setSelectedThresholdMachineID(null);
+      setSelectedSampleMachineID(null);
+      setSelectedAlertMachineID(null);
+      return true;
     } catch (loadError) {
-      setError(toErrorMessage(loadError, language));
+      setGuestModeEnabled(false);
+      if (reportError) {
+        setError(toErrorMessage(loadError, language));
+      }
+      return false;
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -488,7 +543,7 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      const [sshKeysResp, machinesResp, globalRules, channelsResp, proxiesResp, samplesResp, alertsResp] = await Promise.all([
+      const [sshKeysResp, machinesResp, globalRules, channelsResp, proxiesResp, samplesResp, alertsResp, guestModeResp] = await Promise.all([
         get<SSHKey[]>("/api/v1/ssh-keys"),
         get<Machine[]>("/api/v1/machines"),
         get<ThresholdRule[]>("/api/v1/thresholds/global"),
@@ -496,6 +551,7 @@ function App() {
         get<NotificationProxy[]>("/api/v1/notification-proxies"),
         get<TrafficSampleList>(trafficSamplesPath(nextSamplesPage, nextSampleMachineID, nextSamplesPageSize, nextSamplePeriodType)),
         get<AlertList>(alertsPath(nextAlertsPage, nextAlertMachineID, nextAlertsPageSize)),
+        get<GuestModeSetting>("/api/v1/settings/guest-mode"),
       ]);
 
       setSSHKeys(sshKeysResp);
@@ -508,6 +564,7 @@ function App() {
       setSamplesTotal(samplesResp.total);
       setAlerts(alertsResp.items);
       setAlertsTotal(alertsResp.total);
+      setGuestModeEnabled(guestModeResp.enabled);
 
       setSelectedThresholdMachineID((currentSelectedMachineID) => {
         if (currentSelectedMachineID === null) {
@@ -580,6 +637,7 @@ function App() {
         username: loginForm.username,
         password: loginForm.password,
       });
+      setGuest(false);
       setProfile(nextProfile);
       setLoginForm((current) => ({ ...current, password: "" }));
       setToast(t("loginSuccess"));
@@ -640,6 +698,8 @@ function App() {
     try {
       await post<null>("/api/v1/auth/logout");
       setProfile(null);
+      setGuest(false);
+      setGuestModeEnabled(false);
       navigate("/overview", { replace: true });
       setToast(t("logoutSuccess"));
     } catch (logoutError) {
@@ -652,6 +712,27 @@ function App() {
   function handleLanguageSelect(nextLanguage: "zh" | "en") {
     setLanguage(nextLanguage);
     setLanguageMenuOpen(false);
+  }
+
+  function handleAdminLogin() {
+    setGuest(false);
+    setProfile(null);
+    setGuestModeEnabled(false);
+    setToast("");
+    setError("");
+    setActionMenuOpen(false);
+    setAccountMenuOpen(false);
+    navigate("/login", { replace: true });
+  }
+
+  async function handleToggleGuestMode() {
+    await submitAction(async () => {
+      const response = await put<GuestModeSetting, { enabled: boolean }>("/api/v1/settings/guest-mode", {
+        enabled: !guestModeEnabled,
+      });
+      setGuestModeEnabled(response.enabled);
+      setToast(response.enabled ? t("guestModeEnableSuccess") : t("guestModeDisableSuccess"));
+    });
   }
 
   function openBackupModal(mode: "export" | "import") {
@@ -1003,6 +1084,10 @@ function App() {
   }
 
   function renderActionMenu() {
+    if (isGuest) {
+      return null;
+    }
+
     return (
       <div className="account-menu-wrapper topbar-action-menu-wrapper">
         <button
@@ -1021,6 +1106,17 @@ function App() {
         </button>
         {isActionMenuOpen ? (
           <div className="account-menu topbar-action-menu" role="menu">
+            <button
+              className="account-menu-item"
+              onClick={() => {
+                setActionMenuOpen(false);
+                void handleToggleGuestMode();
+              }}
+              role="menuitem"
+              type="button"
+            >
+              {guestModeEnabled ? t("disableGuestMode") : t("enableGuestMode")}
+            </button>
             <button
               className="account-menu-item"
               onClick={() => {
@@ -1629,7 +1725,7 @@ function App() {
     );
   }
 
-  if (!profile) {
+  if (!profile && !isGuest) {
     return (
       <main className="app-shell auth-shell">
         <section className="panel auth-panel">
@@ -1708,7 +1804,7 @@ function App() {
         </section>
 
         <nav className="tab-list">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <NavLink
               key={tab.key}
               to={tab.path}
@@ -1746,36 +1842,49 @@ function App() {
                 >
                   <span className="account-avatar">{adminInitials}</span>
                   <span className="account-copy">
-                    <strong>{profile.username}</strong>
-                    <small>Admin</small>
+                    <strong>{profile?.username ?? t("guestMode")}</strong>
+                    <small>{profile ? "Admin" : t("readOnlyRole")}</small>
                   </span>
                   <span className="account-menu-caret" aria-hidden="true" />
                 </button>
                 {isAccountMenuOpen ? (
                   <div className="account-menu" role="menu">
                     <div className="account-menu-header">
-                      <strong>{profile.username}</strong>
-                      <span>Admin</span>
+                      <strong>{profile?.username ?? t("guestMode")}</strong>
+                      <span>{profile ? "Admin" : t("readOnlyRole")}</span>
                     </div>
-                    <button
-                      className="account-menu-item"
-                      onClick={openPasswordModal}
-                      role="menuitem"
-                      type="button"
-                    >
-                      {t("changePassword")}
-                    </button>
-                    <button
-                      className="account-menu-item danger"
-                      onClick={() => {
-                        setAccountMenuOpen(false);
-                        void handleLogout();
-                      }}
-                      role="menuitem"
-                      type="button"
-                    >
-                      {t("logout")}
-                    </button>
+                    {profile ? (
+                      <>
+                        <button
+                          className="account-menu-item"
+                          onClick={openPasswordModal}
+                          role="menuitem"
+                          type="button"
+                        >
+                          {t("changePassword")}
+                        </button>
+                        <button
+                          className="account-menu-item danger"
+                          onClick={() => {
+                            setAccountMenuOpen(false);
+                            void handleLogout();
+                          }}
+                          role="menuitem"
+                          type="button"
+                        >
+                          {t("logout")}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="account-menu-item"
+                        onClick={handleAdminLogin}
+                        role="menuitem"
+                        type="button"
+                      >
+                        {t("adminLogin")}
+                      </button>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -1807,62 +1916,76 @@ function App() {
         ) : null}
 
         <Routes>
-          <Route path="/" element={<Navigate replace to="/overview" />} />
+          <Route path="/" element={<Navigate replace to={isGuest ? "/samples" : "/overview"} />} />
           <Route
             path="/overview"
             element={
-              <OverviewTab
-                sshKeys={sshKeys}
-                machines={machines}
-                notificationChannels={notificationChannels}
-                samplesTotal={samplesTotal}
-                alertsTotal={alertsTotal}
-                collectResults={collectResults}
-                onNavigate={(tab) => navigate(tabPath(tab as TabKey))}
-              />
+              isGuest ? (
+                <Navigate replace to="/samples" />
+              ) : (
+                <OverviewTab
+                  sshKeys={sshKeys}
+                  machines={machines}
+                  notificationChannels={notificationChannels}
+                  samplesTotal={samplesTotal}
+                  alertsTotal={alertsTotal}
+                  collectResults={collectResults}
+                  readOnly={isGuest}
+                  onNavigate={(tab) => navigate(tabPath(tab as TabKey))}
+                />
+              )
             }
           />
           <Route
             path="/ssh-keys"
             element={
-              <SSHKeysPage
-                busy={busy}
-                sshKeys={sshKeys}
-                sshImportForm={sshImportForm}
-                sshGenerateForm={sshGenerateForm}
-                setSSHImportForm={setSSHImportForm}
-                setSSHGenerateForm={setSSHGenerateForm}
-                onImportSubmit={handleImportSSHKey}
-                onGenerateSubmit={handleGenerateSSHKey}
-                onDeleteSSHKey={handleDeleteSSHKey}
-                renamingSSHKeyID={renamingSSHKeyID}
-                sshRenameName={sshRenameName}
-                setSSHRenameName={setSSHRenameName}
-                onStartRenameSSHKey={startRenameSSHKey}
-                onCancelRenameSSHKey={cancelRenameSSHKey}
-                onRenameSSHKey={handleRenameSSHKey}
-              />
+              isGuest ? (
+                <Navigate replace to="/samples" />
+              ) : (
+                <SSHKeysPage
+                  busy={busy}
+                  sshKeys={sshKeys}
+                  sshImportForm={sshImportForm}
+                  sshGenerateForm={sshGenerateForm}
+                  setSSHImportForm={setSSHImportForm}
+                  setSSHGenerateForm={setSSHGenerateForm}
+                  onImportSubmit={handleImportSSHKey}
+                  onGenerateSubmit={handleGenerateSSHKey}
+                  onDeleteSSHKey={handleDeleteSSHKey}
+                  renamingSSHKeyID={renamingSSHKeyID}
+                  sshRenameName={sshRenameName}
+                  setSSHRenameName={setSSHRenameName}
+                  onStartRenameSSHKey={startRenameSSHKey}
+                  onCancelRenameSSHKey={cancelRenameSSHKey}
+                  onRenameSSHKey={handleRenameSSHKey}
+                />
+              )
             }
           />
           <Route
             path="/machines"
             element={
-              <MachinesPage
-                busy={busy}
-                editingMachineID={editingMachineID}
-                machineForm={machineForm}
-                machineFormSaved={machineFormSaved}
-                sshKeys={sshKeys}
-                machines={machines}
-                connectionResults={connectionResults}
-                testingMachineIDs={testingMachineIDs}
-                onMachineSubmit={handleMachineSubmit}
-                onResetMachineForm={resetMachineForm}
-                onUpdateMachineForm={updateMachineForm}
-                onStartEditMachine={startEditMachine}
-                onTestConnection={handleTestConnection}
-                onDeleteMachine={handleDeleteMachine}
-              />
+              isGuest ? (
+                <Navigate replace to="/samples" />
+              ) : (
+                <MachinesPage
+                  busy={busy}
+                  editingMachineID={editingMachineID}
+                  machineForm={machineForm}
+                  machineFormSaved={machineFormSaved}
+                  readOnly={isGuest}
+                  sshKeys={sshKeys}
+                  machines={machines}
+                  connectionResults={connectionResults}
+                  testingMachineIDs={testingMachineIDs}
+                  onMachineSubmit={handleMachineSubmit}
+                  onResetMachineForm={resetMachineForm}
+                  onUpdateMachineForm={updateMachineForm}
+                  onStartEditMachine={startEditMachine}
+                  onTestConnection={handleTestConnection}
+                  onDeleteMachine={handleDeleteMachine}
+                />
+              )
             }
           />
           <Route
@@ -1877,6 +2000,7 @@ function App() {
                 selectedMachineID={selectedThresholdMachineID}
                 selectedMachine={selectedMachine}
                 machineOptions={machineOptions}
+                readOnly={isGuest}
                 onSelectMachine={setSelectedThresholdMachineID}
                 onChangeGlobalThresholdForm={(rows) => {
                   setGlobalThresholdForm(rows);
@@ -1894,30 +2018,34 @@ function App() {
           <Route
             path="/notifications"
             element={
-              <NotificationsPage
-                busy={busy}
-                notificationChannels={notificationChannels}
-                notificationProxies={notificationProxies}
-                notificationProxyForm={notificationProxyForm}
-                notificationProxySaved={notificationProxySaved}
-                webhookForm={webhookForm}
-                webhookSaved={webhookSaved}
-                webhookPreview={webhookPreview}
-                telegramForm={telegramForm}
-                telegramSaved={telegramSaved}
-                telegramPreview={telegramPreview}
-                onNotificationProxyFormChange={updateNotificationProxyForm}
-                onSaveNotificationProxy={handleSaveNotificationProxy}
-                onEditNotificationProxy={startEditNotificationProxy}
-                onCancelEditNotificationProxy={cancelEditNotificationProxy}
-                onDeleteNotificationProxy={handleDeleteNotificationProxy}
-                onWebhookFormChange={updateWebhookForm}
-                onTelegramFormChange={updateTelegramForm}
-                onSaveWebhook={handleSaveWebhook}
-                onTestWebhook={() => void handleTestWebhook()}
-                onTestTelegram={() => void handleTestTelegram()}
-                onSaveTelegram={handleSaveTelegram}
-              />
+              isGuest ? (
+                <Navigate replace to="/samples" />
+              ) : (
+                <NotificationsPage
+                  busy={busy}
+                  notificationChannels={notificationChannels}
+                  notificationProxies={notificationProxies}
+                  notificationProxyForm={notificationProxyForm}
+                  notificationProxySaved={notificationProxySaved}
+                  webhookForm={webhookForm}
+                  webhookSaved={webhookSaved}
+                  webhookPreview={webhookPreview}
+                  telegramForm={telegramForm}
+                  telegramSaved={telegramSaved}
+                  telegramPreview={telegramPreview}
+                  onNotificationProxyFormChange={updateNotificationProxyForm}
+                  onSaveNotificationProxy={handleSaveNotificationProxy}
+                  onEditNotificationProxy={startEditNotificationProxy}
+                  onCancelEditNotificationProxy={cancelEditNotificationProxy}
+                  onDeleteNotificationProxy={handleDeleteNotificationProxy}
+                  onWebhookFormChange={updateWebhookForm}
+                  onTelegramFormChange={updateTelegramForm}
+                  onSaveWebhook={handleSaveWebhook}
+                  onTestWebhook={() => void handleTestWebhook()}
+                  onTestTelegram={() => void handleTestTelegram()}
+                  onSaveTelegram={handleSaveTelegram}
+                />
+              )
             }
           />
           <Route
@@ -1933,6 +2061,7 @@ function App() {
                 page={samplesPage}
                 pageSize={samplesPageSize}
                 collectResults={collectResults}
+                readOnly={isGuest}
                 onSelectMachine={(machineID) => void handleSelectSampleMachine(machineID)}
                 onSelectPeriodType={(periodType) => void handleSelectSamplePeriodType(periodType)}
                 onPageChange={(page) => void handleSamplesPageChange(page)}
@@ -1961,7 +2090,7 @@ function App() {
               />
             }
           />
-          <Route path="*" element={<Navigate replace to="/overview" />} />
+          <Route path="*" element={<Navigate replace to={isGuest ? "/samples" : "/overview"} />} />
         </Routes>
         {renderPasswordModal()}
         {renderBackupModal()}

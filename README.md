@@ -121,6 +121,7 @@ cp config/config.toml.example config/config.toml
 - `bootstrap.init_admin_username` 和 `bootstrap.init_admin_password` 必须同时配置，或同时留空；同时留空时会自动创建 `admin` 并在首次创建成功后输出随机密码到日志
 - 使用自动生成的随机密码首次登录后，建议立即修改管理员密码
 - `session.secret`、`security.app_master_key`、初始化管理员密码、恢复 Token 等敏感信息，建议优先放在 `config/private.toml` 或环境变量中
+- 游客只读模式由管理员在控制台操作菜单中开启或关闭，不再通过环境变量或配置文件控制
 
 ## 日志格式说明
 
