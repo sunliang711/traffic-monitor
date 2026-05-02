@@ -327,7 +327,23 @@ a {
 .app-brand {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.app-version {
+  max-width: 120px;
+  overflow: hidden;
+  padding: 3px 8px;
+  border: 1px solid rgba(94, 234, 212, 0.24);
+  border-radius: 999px;
+  color: #9ee9df;
+  background: rgba(20, 184, 166, 0.08);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-icon {
@@ -836,6 +852,7 @@ a {
 }
 
 .sidebar-collapsed .eyebrow,
+.sidebar-collapsed .app-version,
 .sidebar-collapsed .sidebar-title,
 .sidebar-collapsed .brand-metrics,
 .sidebar-collapsed .tab-label {
@@ -1946,6 +1963,44 @@ a {
   grid-column: 1 / -1;
 }
 
+.field-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.field-toolbar .action-row {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.compact-button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.webhook-template-textarea {
+  min-height: 300px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.field-help {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.field-help.error {
+  color: #fda4af;
+}
+
 .variable-description-list {
   display: grid;
   gap: 0;
@@ -2385,6 +2440,7 @@ a {
   }
 
   .sidebar-collapsed .eyebrow,
+  .sidebar-collapsed .app-version,
   .sidebar-collapsed .sidebar-title,
   .sidebar-collapsed .tab-label {
     display: block;

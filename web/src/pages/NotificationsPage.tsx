@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { NotificationChannel, NotificationProxy } from "../types";
 import type {
@@ -35,11 +35,27 @@ type NotificationsPageProps = {
   onSaveTelegram: (event: FormEvent<HTMLFormElement>) => void;
 };
 
+function formatJSONTemplate(value: string) {
+  return JSON.stringify(JSON.parse(value), null, 2);
+}
+
+function escapeJSONTextValue(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, "\\\"")
+    .replace(/\r\n/g, "\\n")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\n");
+}
+
 export default function NotificationsPage(props: NotificationsPageProps) {
   const { t } = useI18n();
   const [isProxyConfigOpen, setProxyConfigOpen] = useState(false);
   const [isWebhookConfigOpen, setWebhookConfigOpen] = useState(false);
   const [isTelegramConfigOpen, setTelegramConfigOpen] = useState(false);
+  const [webhookBodyMessage, setWebhookBodyMessage] = useState("");
+  const [isWebhookBodyMessageError, setWebhookBodyMessageError] = useState(false);
+  const webhookBodyTextAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const notificationVariables = [
     { token: "{{machine_id}}", description: t("notificationsVariableMachineID") },
     { token: "{{machine_name}}", description: t("notificationsVariableMachineName") },
@@ -67,6 +83,42 @@ export default function NotificationsPage(props: NotificationsPageProps) {
     }
 
     return proxyID ? t("notificationsProxyMissing", { id: String(proxyID) }) : t("notificationsNoProxy");
+  };
+  const setWebhookBodyInfo = (message: string, isError = false) => {
+    setWebhookBodyMessage(message);
+    setWebhookBodyMessageError(isError);
+  };
+  const formatWebhookBody = () => {
+    try {
+      const formattedBody = formatJSONTemplate(props.webhookForm.bodyText);
+      props.onWebhookFormChange((current) => ({ ...current, bodyText: formattedBody }));
+      setWebhookBodyInfo(t("notificationsBodyJsonValid"));
+    } catch (error) {
+      setWebhookBodyInfo(
+        t("notificationsBodyJsonInvalid", { message: error instanceof Error ? error.message : t("statusError") }),
+        true,
+      );
+    }
+  };
+  const escapeWebhookBodySelection = () => {
+    const textArea = webhookBodyTextAreaRef.current;
+    if (!textArea || textArea.selectionStart === textArea.selectionEnd) {
+      setWebhookBodyInfo(t("notificationsBodySelectTextFirst"), true);
+      return;
+    }
+
+    const start = textArea.selectionStart;
+    const end = textArea.selectionEnd;
+    const currentBody = props.webhookForm.bodyText;
+    const escapedText = escapeJSONTextValue(currentBody.slice(start, end));
+    const nextBody = `${currentBody.slice(0, start)}${escapedText}${currentBody.slice(end)}`;
+    props.onWebhookFormChange((current) => ({ ...current, bodyText: nextBody }));
+    setWebhookBodyInfo(t("notificationsBodySelectionEscaped"));
+
+    window.requestAnimationFrame(() => {
+      textArea.focus();
+      textArea.setSelectionRange(start, start + escapedText.length);
+    });
   };
 
   return (
@@ -306,13 +358,26 @@ export default function NotificationsPage(props: NotificationsPageProps) {
 }`}
                 />
               </label>
-              <label className="field full-width">
-                <span>{t("notificationsBody")}</span>
+              <div className="field full-width">
+                <div className="field-toolbar webhook-template-toolbar">
+                  <span>{t("notificationsBody")}</span>
+                  <div className="action-row">
+                    <button className="secondary-button compact-button" onClick={formatWebhookBody} type="button">
+                      {t("notificationsBodyFormatJson")}
+                    </button>
+                    <button className="secondary-button compact-button" onClick={escapeWebhookBodySelection} type="button">
+                      {t("notificationsBodyEscapeSelection")}
+                    </button>
+                  </div>
+                </div>
                 <textarea
-                  rows={7}
+                  className="webhook-template-textarea"
+                  ref={webhookBodyTextAreaRef}
+                  rows={13}
                   value={props.webhookForm.bodyText}
                   onChange={(event) => {
                     props.onWebhookFormChange((current) => ({ ...current, bodyText: event.target.value }));
+                    setWebhookBodyInfo("");
                   }}
                   placeholder={`{
   "machine_id": "{{machine_id}}",
@@ -328,7 +393,10 @@ export default function NotificationsPage(props: NotificationsPageProps) {
   "alert_key": "{{alert_key}}"
 }`}
                 />
-              </label>
+                <p className={`field-help ${isWebhookBodyMessageError ? "error" : ""}`}>
+                  {webhookBodyMessage || t("notificationsBodyEditHint")}
+                </p>
+              </div>
               <div className="card">
                 <div className="card-header">
                   <strong>{t("notificationsVariablesTitle")}</strong>

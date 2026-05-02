@@ -61,6 +61,8 @@ import type {
   WebhookTestResponse,
 } from "./types";
 
+const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "dev";
+
 const emptyMachineForm = (): MachineFormState => ({
   name: "",
   host: "",
@@ -117,6 +119,10 @@ function AppIcon() {
       </svg>
     </span>
   );
+}
+
+function AppVersionBadge() {
+  return <span className="app-version">{appVersion}</span>;
 }
 
 function TabIcon({ tabKey }: { tabKey: TabKey }) {
@@ -1655,6 +1661,7 @@ function App() {
           <div className="app-brand">
             <AppIcon />
             <p className="eyebrow">traffic-monitor</p>
+            <AppVersionBadge />
           </div>
           <div className="panel-header-inline auth-header">
             <div className="auth-copy">
@@ -1732,6 +1739,7 @@ function App() {
           <div className="app-brand">
             <AppIcon />
             <p className="eyebrow">traffic-monitor</p>
+            <AppVersionBadge />
           </div>
           <div className="panel-header-inline auth-header">
             <div className="auth-copy">
@@ -1777,6 +1785,7 @@ function App() {
               <div className="app-brand">
                 <AppIcon />
                 <p className="eyebrow">traffic-monitor</p>
+                <AppVersionBadge />
               </div>
               <h1 className="sidebar-title">{t("sidebarTitle")}</h1>
             </NavLink>
