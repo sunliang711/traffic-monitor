@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AUTH_EXPIRED_EVENT, del, get, patch, post, put, withQuery } from "./api";
+import Modal from "./components/Modal";
 import OverviewTab from "./components/OverviewTab";
 import { useI18n } from "./lib/i18n";
+import { useDismissable } from "./lib/useDismissable";
 import type {
   ChangePasswordFormState,
   LoginFormState,
@@ -258,6 +260,9 @@ function App() {
   const [backupImportFile, setBackupImportFile] = useState<EncryptedBackup | null>(null);
   const [passwordForm, setPasswordForm] = useState<ChangePasswordFormState>(emptyChangePasswordForm());
   const [restorePasswordForm, setRestorePasswordForm] = useState<RestorePasswordFormState>(emptyRestorePasswordForm());
+  const actionMenuRef = useDismissable<HTMLDivElement>(isActionMenuOpen, () => setActionMenuOpen(false));
+  const languageMenuRef = useDismissable<HTMLDivElement>(isLanguageMenuOpen, () => setLanguageMenuOpen(false));
+  const accountMenuRef = useDismissable<HTMLDivElement>(isAccountMenuOpen, () => setAccountMenuOpen(false));
   const adminInitials = profile?.username.slice(0, 2).toUpperCase() || "GU";
   const currentLanguageLabel = language === "zh" ? t("languageChinese") : t("languageEnglish");
   const currentLanguageBadge = language === "zh" ? "中" : "EN";
@@ -370,6 +375,15 @@ function App() {
     setAccountMenuOpen(false);
     setLanguageMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setToast(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     function handleAuthExpired() {
@@ -890,53 +904,44 @@ function App() {
     }
 
     return (
-      <div className="modal-backdrop" role="presentation">
-        <section className="modal-panel password-modal-panel" aria-modal="true" role="dialog">
-          <div className="modal-header">
-            <div>
-              <h3 className="panel-title">{t("changePasswordTitle")}</h3>
-            </div>
-            <button className="secondary-button modal-close-button" onClick={closePasswordModal} type="button">
-              {t("close")}
+      <Modal className="password-modal-panel" title={t("changePasswordTitle")} onClose={closePasswordModal}>
+        <form className="form-grid" onSubmit={handleChangePasswordSubmit}>
+          <label className="field">
+            <span>{t("currentPassword")}</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              required
+              value={passwordForm.currentPassword}
+              onChange={(event) =>
+                setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))
+              }
+              placeholder={t("currentPasswordPlaceholder")}
+            />
+          </label>
+          <label className="field">
+            <span>{t("newPassword")}</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              minLength={6}
+              required
+              value={passwordForm.newPassword}
+              onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+              placeholder={t("newPasswordPlaceholder")}
+            />
+          </label>
+          {error ? <p className="message error">{error}</p> : null}
+          <div className="modal-actions">
+            <button className="secondary-button" onClick={closePasswordModal} type="button">
+              {t("cancel")}
+            </button>
+            <button className="primary-button" disabled={busy} type="submit">
+              {t("changePasswordSubmit")}
             </button>
           </div>
-
-          <form className="form-grid" onSubmit={handleChangePasswordSubmit}>
-            <label className="field">
-              <span>{t("currentPassword")}</span>
-              <input
-                type="password"
-                required
-                value={passwordForm.currentPassword}
-                onChange={(event) =>
-                  setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))
-                }
-                placeholder={t("currentPasswordPlaceholder")}
-              />
-            </label>
-            <label className="field">
-              <span>{t("newPassword")}</span>
-              <input
-                type="password"
-                minLength={6}
-                required
-                value={passwordForm.newPassword}
-                onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
-                placeholder={t("newPasswordPlaceholder")}
-              />
-            </label>
-            {error ? <p className="message error">{error}</p> : null}
-            <div className="modal-actions">
-              <button className="secondary-button" onClick={closePasswordModal} type="button">
-                {t("cancel")}
-              </button>
-              <button className="primary-button" disabled={busy} type="submit">
-                {t("changePasswordSubmit")}
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>
+        </form>
+      </Modal>
     );
   }
 
@@ -946,20 +951,12 @@ function App() {
     }
 
     return (
-      <div className="modal-backdrop" role="presentation">
-        <section className="modal-panel backup-modal-panel" aria-modal="true" role="dialog">
-          <div className="modal-header">
-            <div>
-              <h3 className="panel-title">
-                {backupModalMode === "export" ? t("backupExportTitle") : t("backupImportTitle")}
-              </h3>
-            </div>
-            <button className="secondary-button modal-close-button" onClick={closeBackupModal} type="button">
-              {t("close")}
-            </button>
-          </div>
-
-          {backupModalMode === "export" ? (
+      <Modal
+        className="backup-modal-panel"
+        title={backupModalMode === "export" ? t("backupExportTitle") : t("backupImportTitle")}
+        onClose={closeBackupModal}
+      >
+        {backupModalMode === "export" ? (
             <form className="form-grid backup-form-grid" onSubmit={handleBackupExportSubmit}>
               <label className="field full-width">
                 <span>{t("backupPassword")}</span>
@@ -1084,8 +1081,7 @@ function App() {
               </div>
             </form>
           )}
-        </section>
-      </div>
+      </Modal>
     );
   }
 
@@ -1095,7 +1091,7 @@ function App() {
     }
 
     return (
-      <div className="account-menu-wrapper topbar-action-menu-wrapper">
+      <div className="account-menu-wrapper topbar-action-menu-wrapper" ref={actionMenuRef}>
         <button
           className={`secondary-button topbar-action-button${isActionMenuOpen ? " open" : ""}`}
           aria-expanded={isActionMenuOpen}
@@ -1164,7 +1160,7 @@ function App() {
 
   function renderLanguageMenu() {
     return (
-      <div className="account-menu-wrapper language-menu-wrapper">
+      <div className="account-menu-wrapper language-menu-wrapper" ref={languageMenuRef}>
         <button
           className={`account-chip language-chip${isLanguageMenuOpen ? " open" : ""}`}
           aria-expanded={isLanguageMenuOpen}
@@ -1186,10 +1182,6 @@ function App() {
         </button>
         {isLanguageMenuOpen ? (
           <div className="account-menu language-menu" role="menu">
-            <div className="account-menu-header">
-              <strong>{t("languageSwitcherLabel")}</strong>
-              <span>{currentLanguageLabel}</span>
-            </div>
             <button
               className={`account-menu-item language-menu-item${language === "zh" ? " active" : ""}`}
               aria-checked={language === "zh"}
@@ -1240,6 +1232,11 @@ function App() {
   }
 
   async function handleDeleteSSHKey(id: number) {
+    const sshKeyName = sshKeys.find((sshKey) => sshKey.id === id)?.name ?? String(id);
+    if (!window.confirm(t("sshKeyDeleteConfirm", { name: sshKeyName }))) {
+      return;
+    }
+
     await submitAction(async () => {
       await del<null>(`/api/v1/ssh-keys/${id}`);
       if (renamingSSHKeyID === id) {
@@ -1302,6 +1299,11 @@ function App() {
   }
 
   async function handleDeleteMachine(id: number) {
+    const machineName = machines.find((machine) => machine.id === id)?.name ?? String(id);
+    if (!window.confirm(t("machineDeleteConfirm", { name: machineName }))) {
+      return;
+    }
+
     await submitAction(async () => {
       const nextSampleMachineID = selectedSampleMachineID === id ? null : selectedSampleMachineID;
       const nextAlertMachineID = selectedAlertMachineID === id ? null : selectedAlertMachineID;
@@ -1415,6 +1417,11 @@ function App() {
   }
 
   async function handleDeleteNotificationProxy(id: number) {
+    const proxyName = notificationProxies.find((proxy) => proxy.id === id)?.name ?? String(id);
+    if (!window.confirm(t("notificationProxyDeleteConfirm", { name: proxyName }))) {
+      return;
+    }
+
     await submitAction(async () => {
       await del<null>(`/api/v1/notification-proxies/${id}`);
       if (notificationProxyForm.id === id) {
@@ -1674,6 +1681,7 @@ function App() {
             <label className="field">
               <span>{t("username")}</span>
               <input
+                autoComplete="username"
                 required
                 value={restorePasswordForm.username}
                 onChange={(event) =>
@@ -1698,6 +1706,7 @@ function App() {
               <span>{t("newPassword")}</span>
               <input
                 type="password"
+                autoComplete="new-password"
                 minLength={6}
                 required
                 value={restorePasswordForm.newPassword}
@@ -1711,6 +1720,7 @@ function App() {
               <span>{t("restoreConfirmPassword")}</span>
               <input
                 type="password"
+                autoComplete="new-password"
                 minLength={6}
                 required
                 value={restorePasswordForm.confirmPassword}
@@ -1752,6 +1762,7 @@ function App() {
             <label className="field">
               <span>{t("username")}</span>
               <input
+                autoComplete="username"
                 value={loginForm.username}
                 onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))}
                 placeholder="admin"
@@ -1761,6 +1772,7 @@ function App() {
               <span>{t("password")}</span>
               <input
                 type="password"
+                autoComplete="current-password"
                 value={loginForm.password}
                 onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
                 placeholder={t("passwordPlaceholder")}
@@ -1837,7 +1849,7 @@ function App() {
             {renderActionMenu()}
             <div className="account-toolbar">
               {renderLanguageMenu()}
-              <div className="account-menu-wrapper">
+              <div className="account-menu-wrapper" ref={accountMenuRef}>
                 <button
                   className={`account-chip${isAccountMenuOpen ? " open" : ""}`}
                   aria-expanded={isAccountMenuOpen}
@@ -1858,10 +1870,6 @@ function App() {
                 </button>
                 {isAccountMenuOpen ? (
                   <div className="account-menu" role="menu">
-                    <div className="account-menu-header">
-                      <strong>{profile?.username ?? t("guestMode")}</strong>
-                      <span>{profile ? "Admin" : t("readOnlyRole")}</span>
-                    </div>
                     {profile ? (
                       <>
                         <button
@@ -1902,20 +1910,28 @@ function App() {
         </header>
 
         {toast ? (
-          <div className="message success elevated" role="status" aria-live="polite">
-            {toast}
+          <div className="message success elevated dismissible" role="status" aria-live="polite">
+            <span className="message-body">{toast}</span>
+            <button className="message-dismiss" aria-label={t("close")} onClick={() => setToast("")} type="button">
+              ×
+            </button>
           </div>
         ) : null}
         {error ? (
-          <div className={`message elevated ${isSSHKeyMismatchError ? "warning" : "error"}`} role="alert">
-            {isSSHKeyMismatchError ? (
-              <>
-                <strong>{t("sshKeyMismatchTitle")}</strong>
-                <span className="message-detail">{error}</span>
-              </>
-            ) : (
-              error
-            )}
+          <div className={`message elevated dismissible ${isSSHKeyMismatchError ? "warning" : "error"}`} role="alert">
+            <span className="message-body">
+              {isSSHKeyMismatchError ? (
+                <>
+                  <strong>{t("sshKeyMismatchTitle")}</strong>
+                  <span className="message-detail">{error}</span>
+                </>
+              ) : (
+                error
+              )}
+            </span>
+            <button className="message-dismiss" aria-label={t("close")} onClick={() => setError("")} type="button">
+              ×
+            </button>
           </div>
         ) : null}
         {busy ? (

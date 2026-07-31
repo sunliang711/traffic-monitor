@@ -15,6 +15,9 @@ temp/
 
 dist/
 node_modules/
+*.tsbuildinfo
+/web/vite.config.js
+/web/vite.config.d.ts
 target/
 build/
 debug/

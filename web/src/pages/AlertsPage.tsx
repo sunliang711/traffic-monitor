@@ -11,7 +11,7 @@ import {
 } from "../lib/app-utils";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
-import PageSizeSelect from "../components/PageSizeSelect";
+import Pagination from "../components/Pagination";
 
 type AlertsPageProps = {
   busy: boolean;
@@ -172,30 +172,15 @@ export default function AlertsPage(props: AlertsPageProps) {
                 );
               })}
             </div>
-            <div className="pagination-row">
-              <div className="pagination-meta">
-                <span className="card-meta">{t("samplesPageInfo", { page: props.page, totalPages, total: props.total })}</span>
-                <PageSizeSelect value={props.pageSize} onChange={(pageSize) => void props.onPageSizeChange(pageSize)} />
-              </div>
-              <div className="action-row">
-                <button
-                  className="secondary-button"
-                  disabled={props.busy || props.page <= 1}
-                  onClick={() => void props.onPageChange(props.page - 1)}
-                  type="button"
-                >
-                  {t("previousPage")}
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={props.busy || props.page >= totalPages}
-                  onClick={() => void props.onPageChange(props.page + 1)}
-                  type="button"
-                >
-                  {t("nextPage")}
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={props.page}
+              totalPages={totalPages}
+              total={props.total}
+              pageSize={props.pageSize}
+              disabled={props.busy}
+              onPageChange={(page) => void props.onPageChange(page)}
+              onPageSizeChange={(pageSize) => void props.onPageSizeChange(pageSize)}
+            />
           </>
         )}
       </section>

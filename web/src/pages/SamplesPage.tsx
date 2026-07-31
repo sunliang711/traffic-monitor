@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CollectNowResponse, TrafficSample } from "../types";
 import type { MachineOption } from "../lib/app-types";
 import {
@@ -11,8 +11,9 @@ import {
   machineDisplay,
 } from "../lib/app-utils";
 import { useI18n } from "../lib/i18n";
+import { useDismissable } from "../lib/useDismissable";
 import EmptyState from "../components/EmptyState";
-import PageSizeSelect from "../components/PageSizeSelect";
+import Pagination from "../components/Pagination";
 
 const autoRefreshOptions = [5, 10, 15, 30];
 const sampleAutoRefreshStorageKey = "traffic-monitor-samples-auto-refresh";
@@ -87,12 +88,12 @@ export default function SamplesPage(props: SamplesPageProps) {
   const autoRefreshCallback = useRef(props.onAutoRefresh);
   const autoRefreshInFlight = useRef(false);
   const busyRef = useRef(props.busy);
-  const autoRefreshWrapperRef = useRef<HTMLDivElement | null>(null);
   const [isAutoRefreshMenuOpen, setAutoRefreshMenuOpen] = useState(false);
+  const autoRefreshWrapperRef = useDismissable<HTMLDivElement>(isAutoRefreshMenuOpen, () => setAutoRefreshMenuOpen(false));
   const [autoRefreshPreference, setAutoRefreshPreference] = useState(readSampleAutoRefreshPreference);
   const autoRefreshEnabled = autoRefreshPreference.enabled;
   const autoRefreshInterval = autoRefreshPreference.interval;
-  const sampleBucketToneMap = buildBucketToneMap(props.samples);
+  const sampleBucketToneMap = useMemo(() => buildBucketToneMap(props.samples), [props.samples]);
   const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
 
   useEffect(() => {
@@ -102,23 +103,6 @@ export default function SamplesPage(props: SamplesPageProps) {
   useEffect(() => {
     busyRef.current = props.busy;
   }, [props.busy]);
-
-  useEffect(() => {
-    if (!isAutoRefreshMenuOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && autoRefreshWrapperRef.current?.contains(event.target)) {
-        return;
-      }
-
-      setAutoRefreshMenuOpen(false);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [isAutoRefreshMenuOpen]);
 
   useEffect(() => {
     try {
@@ -356,30 +340,15 @@ export default function SamplesPage(props: SamplesPageProps) {
                 );
               })}
             </div>
-            <div className="pagination-row">
-              <div className="pagination-meta">
-                <span className="card-meta">{t("samplesPageInfo", { page: props.page, totalPages, total: props.total })}</span>
-                <PageSizeSelect value={props.pageSize} onChange={(pageSize) => void props.onPageSizeChange(pageSize)} />
-              </div>
-              <div className="action-row">
-                <button
-                  className="secondary-button"
-                  disabled={props.busy || props.page <= 1}
-                  onClick={() => void props.onPageChange(props.page - 1)}
-                  type="button"
-                >
-                  {t("previousPage")}
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={props.busy || props.page >= totalPages}
-                  onClick={() => void props.onPageChange(props.page + 1)}
-                  type="button"
-                >
-                  {t("nextPage")}
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={props.page}
+              totalPages={totalPages}
+              total={props.total}
+              pageSize={props.pageSize}
+              disabled={props.busy}
+              onPageChange={(page) => void props.onPageChange(page)}
+              onPageSizeChange={(pageSize) => void props.onPageSizeChange(pageSize)}
+            />
           </>
         )}
       </section>

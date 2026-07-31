@@ -4,7 +4,8 @@ import type { SSHKey } from "../types";
 import type { SSHKeyGenerateState, SSHKeyImportState } from "../lib/app-types";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
-import PageSizeSelect from "../components/PageSizeSelect";
+import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
 
 type SSHKeysPageProps = {
   busy: boolean;
@@ -25,6 +26,23 @@ type SSHKeysPageProps = {
 };
 
 type SSHKeyModal = "import" | "generate";
+
+function CopyIcon() {
+  return (
+    <svg className="copy-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="9" y="9" width="11" height="11" rx="2.5" />
+      <path d="M5.5 15H4.75A1.75 1.75 0 0 1 3 13.25V4.75A1.75 1.75 0 0 1 4.75 3H13.25A1.75 1.75 0 0 1 15 4.75V5.5" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg className="copy-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M5 12.5L10 17.5L19 7.5" />
+    </svg>
+  );
+}
 
 async function copyText(value: string) {
   if (navigator.clipboard?.writeText) {
@@ -149,27 +167,25 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                 <tbody>
                   {visibleSSHKeys.map((sshKey) => (
                     <tr key={sshKey.id}>
-                      <td>
-                        <div className="stacked-copy">
-                          <strong>{sshKey.name}</strong>
-                          <span className="card-tag">{sshKey.source_type}</span>
-                        </div>
+                      <td className="ssh-key-name-cell">
+                        <strong className="ssh-key-name">{sshKey.name}</strong>
+                        <span className="ssh-key-source">{sshKey.source_type}</span>
                       </td>
                       <td>{sshKey.key_type}</td>
                       <td>
-                        <span className="table-text-muted table-text-ellipsis" title={sshKey.fingerprint}>{sshKey.fingerprint}</span>
+                        <code className="fingerprint-text" title={sshKey.fingerprint}>{sshKey.fingerprint}</code>
                       </td>
                       <td>
                         <div className="public-key-box">
-                          <pre className="code-block table-code-block table-code-ellipsis" title={sshKey.public_key}>{sshKey.public_key}</pre>
+                          <code className="public-key-text" title={sshKey.public_key}>{sshKey.public_key}</code>
                           <button
-                            className={`copy-public-key-button ${copiedSSHKeyID === sshKey.id ? "copied" : ""}`}
+                            className={`copy-public-key-button${copiedSSHKeyID === sshKey.id ? " copied" : ""}`}
                             aria-label={copiedSSHKeyID === sshKey.id ? t("sshKeysCopied") : t("sshKeysCopyPublicKey")}
                             onClick={() => void handleCopyPublicKey(sshKey)}
                             title={copiedSSHKeyID === sshKey.id ? t("sshKeysCopied") : t("sshKeysCopyPublicKey")}
                             type="button"
                           >
-                            <span className="copy-icon" aria-hidden="true" />
+                            {copiedSSHKeyID === sshKey.id ? <CheckIcon /> : <CopyIcon />}
                           </button>
                         </div>
                       </td>
@@ -215,38 +231,23 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                 </tbody>
               </table>
             </div>
-            <div className="pagination-row">
-              <div className="pagination-meta">
-                <span className="card-meta">{t("samplesPageInfo", { page, totalPages, total: props.sshKeys.length })}</span>
-                <PageSizeSelect value={pageSize} onChange={handlePageSizeChange} />
-              </div>
-              <div className="action-row">
-                <button className="secondary-button" disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">
-                  {t("previousPage")}
-                </button>
-                <button className="secondary-button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} type="button">
-                  {t("nextPage")}
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={props.sshKeys.length}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </>
         )}
       </section>
 
       {activeModal ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-panel" aria-modal="true" role="dialog">
-            <div className="modal-header">
-              <div>
-                <h3 className="panel-title">
-                  {activeModal === "import" ? t("sshKeysImportTitle") : t("sshKeysGenerateTitle")}
-                </h3>
-              </div>
-              <button className="secondary-button modal-close-button" onClick={closeModal} type="button">
-                {t("close")}
-              </button>
-            </div>
-
+        <Modal
+          title={activeModal === "import" ? t("sshKeysImportTitle") : t("sshKeysGenerateTitle")}
+          onClose={closeModal}
+        >
             {activeModal === "import" ? (
               <form className="form-grid" onSubmit={handleImportSubmit}>
                 <label className="field">
@@ -309,8 +310,7 @@ export default function SSHKeysPage(props: SSHKeysPageProps) {
                 </div>
               </form>
             )}
-          </section>
-        </div>
+        </Modal>
       ) : null}
     </div>
   );

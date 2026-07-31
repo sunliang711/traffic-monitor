@@ -6,7 +6,8 @@ import type { MachineFormState } from "../lib/app-types";
 import { formatStatusText } from "../lib/app-utils";
 import { useI18n } from "../lib/i18n";
 import EmptyState from "../components/EmptyState";
-import PageSizeSelect from "../components/PageSizeSelect";
+import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
 
 type MachinesPageProps = {
   busy: boolean;
@@ -343,36 +344,23 @@ export default function MachinesPage(props: MachinesPageProps) {
                 </tbody>
               </table>
             </div>
-            <div className="pagination-row">
-              <div className="pagination-meta">
-                <span className="card-meta">{t("samplesPageInfo", { page, totalPages, total: machines.length })}</span>
-                <PageSizeSelect value={pageSize} onChange={handlePageSizeChange} />
-              </div>
-              <div className="action-row">
-                <button className="secondary-button" disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">
-                  {t("previousPage")}
-                </button>
-                <button className="secondary-button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} type="button">
-                  {t("nextPage")}
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={machines.length}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </>
         )}
       </section>
 
       {isMachineModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-panel" aria-modal="true" role="dialog">
-            <div className="modal-header">
-              <div>
-                <h3 className="panel-title">{editingMachineID ? t("machinesEditTitle") : t("machinesCreateTitle")}</h3>
-              </div>
-              <button className="secondary-button modal-close-button" onClick={closeMachineModal} type="button">
-                {t("close")}
-              </button>
-            </div>
-
+        <Modal
+          title={editingMachineID ? t("machinesEditTitle") : t("machinesCreateTitle")}
+          onClose={closeMachineModal}
+        >
             <form className="form-grid machine-form-grid" onSubmit={handleMachineModalSubmit}>
               <label className="field">
                 <span>{t("machinesName")}</span>
@@ -456,8 +444,7 @@ export default function MachinesPage(props: MachinesPageProps) {
                 </button>
               </div>
             </form>
-          </section>
-        </div>
+        </Modal>
       ) : null}
 
       {testPopoverMachine

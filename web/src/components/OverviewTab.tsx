@@ -31,17 +31,10 @@ export default function OverviewTab(props: OverviewTabProps) {
 
   return (
     <div className="overview-layout">
-      <section className="hero-panel overview-hero">
-        <div className="hero-copy">
-          <p className="eyebrow">traffic-monitor</p>
-          <h3>{t("overviewSummaryTitle")}</h3>
-          <p>{t("overviewSummaryDescription")}</p>
-        </div>
-        <div className="hero-summary-grid">
-          <SummaryTile label={t("overviewEnabledMachines")} value={String(enabledMachines)} tone="teal" />
-          <SummaryTile label={t("overviewConfiguredNotifications")} value={String(configuredChannels)} tone="amber" />
-          <SummaryTile label={t("overviewLatestStatus")} value={latestStatus} tone="slate" />
-        </div>
+      <section className="summary-strip">
+        <SummaryTile label={t("overviewEnabledMachines")} value={String(enabledMachines)} tone="teal" />
+        <SummaryTile label={t("overviewConfiguredNotifications")} value={String(configuredChannels)} tone="amber" />
+        <SummaryTile label={t("overviewLatestStatus")} value={latestStatus} tone="slate" />
       </section>
 
       <div className="grid overview-grid">
@@ -141,7 +134,7 @@ function StatCard(props: StatCardProps) {
 
 function SummaryTile(props: { label: string; value: string; tone: "teal" | "amber" | "slate" }) {
   return (
-    <article className={`summary-tile ${props.tone}`}>
+    <article className={`summary-tile ${props.tone} compact`}>
       <span>{props.label}</span>
       <strong>{props.value}</strong>
     </article>
