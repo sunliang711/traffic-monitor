@@ -8,14 +8,19 @@ import (
 	"traffic-monitor/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
 )
 
 type BackupHandler struct {
 	backupService *service.BackupService
+	log           zerolog.Logger
 }
 
-func NewBackupHandler(backupService *service.BackupService) *BackupHandler {
-	return &BackupHandler{backupService: backupService}
+func NewBackupHandler(backupService *service.BackupService, log zerolog.Logger) *BackupHandler {
+	return &BackupHandler{
+		backupService: backupService,
+		log:           log,
+	}
 }
 
 func (handler *BackupHandler) RegisterRoutes(authenticatedGroup *gin.RouterGroup) {
@@ -32,7 +37,7 @@ func (handler *BackupHandler) Export(ctx *gin.Context) {
 
 	backup, err := handler.backupService.Export(ctx.Request.Context(), req)
 	if err != nil {
-		handleBackupServiceError(ctx, err)
+		handler.handleBackupServiceError(ctx, err)
 		return
 	}
 
@@ -52,7 +57,7 @@ func (handler *BackupHandler) Import(ctx *gin.Context) {
 
 	response, err := handler.backupService.Import(ctx.Request.Context(), req)
 	if err != nil {
-		handleBackupServiceError(ctx, err)
+		handler.handleBackupServiceError(ctx, err)
 		return
 	}
 
@@ -63,7 +68,7 @@ func (handler *BackupHandler) Import(ctx *gin.Context) {
 	})
 }
 
-func handleBackupServiceError(ctx *gin.Context, err error) {
+func (handler *BackupHandler) handleBackupServiceError(ctx *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrInvalidBackupRequest):
 		ctx.JSON(http.StatusBadRequest, dto.Response{Code: http.StatusBadRequest, Data: nil, Message: "invalid backup request"})
@@ -78,6 +83,8 @@ func handleBackupServiceError(ctx *gin.Context, err error) {
 			Message: "SSH 私钥无法解密，当前 APP_MASTER_KEY 可能与导入该密钥时使用的不一致，请恢复旧密钥或重新导入 SSH Key",
 		})
 	default:
+		// 导入不是单个事务，未预期的错误可能已写入部分数据，必须留下可排查的日志。
+		handler.log.Error().Err(err).Str("path", ctx.FullPath()).Msg("backup request failed")
 		internalServerError(ctx)
 	}
 }

@@ -45,6 +45,19 @@ func (repo *NotificationChannelRepo) Upsert(ctx context.Context, channel *model.
 	return nil
 }
 
+// CreateIfAbsent 仅在该渠道类型尚未配置时写入，导入备份时用于保证不覆盖已有渠道。
+func (repo *NotificationChannelRepo) CreateIfAbsent(ctx context.Context, channel *model.NotificationChannel) (bool, error) {
+	result := repo.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "channel_type"}},
+		DoNothing: true,
+	}).Create(channel)
+	if result.Error != nil {
+		return false, fmt.Errorf("create notification channel if absent: %w", result.Error)
+	}
+
+	return result.RowsAffected > 0, nil
+}
+
 func (repo *NotificationChannelRepo) List(ctx context.Context) ([]model.NotificationChannel, error) {
 	var channels []model.NotificationChannel
 	if err := repo.db.WithContext(ctx).Order("channel_type asc").Find(&channels).Error; err != nil {

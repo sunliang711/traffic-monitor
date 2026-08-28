@@ -41,6 +41,26 @@ func (repo *ThresholdRuleRepo) UpsertGlobalRules(ctx context.Context, rules []mo
 	return nil
 }
 
+// CreateGlobalRulesIfAbsent 只插入不存在的维度并返回实际写入行数，导入备份时用于保证不覆盖已有规则。
+func (repo *ThresholdRuleRepo) CreateGlobalRulesIfAbsent(ctx context.Context, rules []model.GlobalThresholdRule) (int64, error) {
+	if len(rules) == 0 {
+		return 0, nil
+	}
+
+	result := repo.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "period_type"},
+			{Name: "metric_type"},
+		},
+		DoNothing: true,
+	}).Create(&rules)
+	if result.Error != nil {
+		return 0, fmt.Errorf("create global threshold rules if absent: %w", result.Error)
+	}
+
+	return result.RowsAffected, nil
+}
+
 func (repo *ThresholdRuleRepo) ListGlobalRules(ctx context.Context) ([]model.GlobalThresholdRule, error) {
 	var rules []model.GlobalThresholdRule
 	if err := repo.db.WithContext(ctx).Order("period_type asc, metric_type asc").Find(&rules).Error; err != nil {
@@ -67,6 +87,27 @@ func (repo *ThresholdRuleRepo) UpsertMachineRules(ctx context.Context, rules []m
 	}
 
 	return nil
+}
+
+// CreateMachineRulesIfAbsent 只插入不存在的维度并返回实际写入行数，导入备份时用于保证不覆盖已有规则。
+func (repo *ThresholdRuleRepo) CreateMachineRulesIfAbsent(ctx context.Context, rules []model.MachineThresholdRule) (int64, error) {
+	if len(rules) == 0 {
+		return 0, nil
+	}
+
+	result := repo.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "machine_id"},
+			{Name: "period_type"},
+			{Name: "metric_type"},
+		},
+		DoNothing: true,
+	}).Create(&rules)
+	if result.Error != nil {
+		return 0, fmt.Errorf("create machine threshold rules if absent: %w", result.Error)
+	}
+
+	return result.RowsAffected, nil
 }
 
 func (repo *ThresholdRuleRepo) ReplaceMachineRules(ctx context.Context, machineID uint, rules []model.MachineThresholdRule, inheritedDimensions []ThresholdRuleDimension) error {
@@ -111,6 +152,22 @@ func (repo *ThresholdRuleRepo) DeleteMachineRules(ctx context.Context, machineID
 	}
 
 	return nil
+}
+
+func (repo *ThresholdRuleRepo) ListMachineRulesByMachineIDs(ctx context.Context, machineIDs []uint) ([]model.MachineThresholdRule, error) {
+	if len(machineIDs) == 0 {
+		return nil, nil
+	}
+
+	var rules []model.MachineThresholdRule
+	if err := repo.db.WithContext(ctx).
+		Where("machine_id IN ?", machineIDs).
+		Order("machine_id asc, period_type asc, metric_type asc").
+		Find(&rules).Error; err != nil {
+		return nil, fmt.Errorf("list machine threshold rules by machine ids: %w", err)
+	}
+
+	return rules, nil
 }
 
 func (repo *ThresholdRuleRepo) ListMachineRules(ctx context.Context, machineID uint) ([]model.MachineThresholdRule, error) {

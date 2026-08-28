@@ -869,6 +869,12 @@ function App() {
         skippedSSHKeys: response.skipped_ssh_keys,
         machines: response.imported_machines,
         skippedMachines: response.skipped_machines,
+        channels: response.imported_notification_channels,
+        skippedChannels: response.skipped_notification_channels,
+        proxies: response.imported_notification_proxies,
+        skippedProxies: response.skipped_notification_proxies,
+        thresholds: response.imported_threshold_rules,
+        skippedThresholds: response.skipped_threshold_rules,
       }));
     });
   }
@@ -958,6 +964,7 @@ function App() {
       >
         {backupModalMode === "export" ? (
             <form className="form-grid backup-form-grid" onSubmit={handleBackupExportSubmit}>
+              <p className="muted full-width">{t("backupExportNotice")}</p>
               <label className="field full-width">
                 <span>{t("backupPassword")}</span>
                 <input

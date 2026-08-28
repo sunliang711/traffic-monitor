@@ -168,4 +168,10 @@ export type BackupImportResponse = {
   skipped_ssh_keys: number;
   imported_machines: number;
   skipped_machines: number;
+  imported_notification_channels: number;
+  skipped_notification_channels: number;
+  imported_notification_proxies: number;
+  skipped_notification_proxies: number;
+  imported_threshold_rules: number;
+  skipped_threshold_rules: number;
 };

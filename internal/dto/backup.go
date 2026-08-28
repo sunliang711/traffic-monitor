@@ -29,8 +29,14 @@ type BackupEncryption struct {
 }
 
 type BackupImportResp struct {
-	ImportedSSHKeys  int `json:"imported_ssh_keys"`
-	SkippedSSHKeys   int `json:"skipped_ssh_keys"`
-	ImportedMachines int `json:"imported_machines"`
-	SkippedMachines  int `json:"skipped_machines"`
+	ImportedSSHKeys              int `json:"imported_ssh_keys"`
+	SkippedSSHKeys               int `json:"skipped_ssh_keys"`
+	ImportedMachines             int `json:"imported_machines"`
+	SkippedMachines              int `json:"skipped_machines"`
+	ImportedNotificationChannels int `json:"imported_notification_channels"`
+	SkippedNotificationChannels  int `json:"skipped_notification_channels"`
+	ImportedNotificationProxies  int `json:"imported_notification_proxies"`
+	SkippedNotificationProxies   int `json:"skipped_notification_proxies"`
+	ImportedThresholdRules       int `json:"imported_threshold_rules"`
+	SkippedThresholdRules        int `json:"skipped_threshold_rules"`
 }
