@@ -16,13 +16,9 @@ type DataProtector struct {
 }
 
 func NewDataProtector(cfg config.SecurityConfig) (*DataProtector, error) {
-	key, err := base64.StdEncoding.DecodeString(cfg.AppMasterKey)
+	key, err := cfg.MasterKey()
 	if err != nil {
 		return nil, fmt.Errorf("decode app master key: %w", err)
-	}
-
-	if len(key) != 32 {
-		return nil, fmt.Errorf("app master key must decode to 32 bytes")
 	}
 
 	return &DataProtector{key: key}, nil

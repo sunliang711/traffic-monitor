@@ -1,12 +1,15 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
 )
 
 const RestoreModeAdminPassword = "admin-password"
+
+const masterKeyBytes = 32
 
 type Config struct {
 	App            AppConfig            `mapstructure:"app"`
@@ -72,6 +75,39 @@ type SessionConfig struct {
 
 type SecurityConfig struct {
 	AppMasterKey string `mapstructure:"app_master_key"`
+}
+
+// MasterKey 解析主密钥，容忍环境变量注入时常见的空白和引号包裹，并兼容 URL 安全和无填充的 base64。
+func (cfg SecurityConfig) MasterKey() ([]byte, error) {
+	raw := strings.Trim(strings.TrimSpace(cfg.AppMasterKey), "\"'")
+	if raw == "" {
+		return nil, fmt.Errorf("security.app_master_key is required")
+	}
+
+	var decodeErr error
+	for _, encoding := range []*base64.Encoding{
+		base64.StdEncoding,
+		base64.RawStdEncoding,
+		base64.URLEncoding,
+		base64.RawURLEncoding,
+	} {
+		key, err := encoding.DecodeString(raw)
+		if err != nil {
+			if decodeErr == nil {
+				decodeErr = err
+			}
+
+			continue
+		}
+
+		if len(key) != masterKeyBytes {
+			return nil, fmt.Errorf("security.app_master_key must decode to %d bytes, got %d; generate one with: openssl rand -base64 %d", masterKeyBytes, len(key), masterKeyBytes)
+		}
+
+		return key, nil
+	}
+
+	return nil, fmt.Errorf("security.app_master_key is not valid base64: %w (length %d after trimming quotes and whitespace); generate one with: openssl rand -base64 %d", decodeErr, len(raw), masterKeyBytes)
 }
 
 type SSHConfig struct {
@@ -193,8 +229,8 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("ssh.command_timeout must be greater than zero")
 	}
 
-	if cfg.Security.AppMasterKey == "" {
-		return fmt.Errorf("security.app_master_key is required")
+	if _, err := cfg.Security.MasterKey(); err != nil {
+		return err
 	}
 
 	if (cfg.Bootstrap.InitAdminUsername == "") != (cfg.Bootstrap.InitAdminPassword == "") {

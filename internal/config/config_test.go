@@ -111,6 +111,53 @@ func TestConfigValidate_ReturnsErrorWhenRestoreModeInvalid(t *testing.T) {
 	require.ErrorContains(t, err, "restore.mode")
 }
 
+func TestSecurityConfigMasterKey_AcceptsWrappedAndAlternateEncodings(t *testing.T) {
+	testCases := map[string]string{
+		"standard":          "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+		"double quoted":     `"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="`,
+		"single quoted":     `'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='`,
+		"surrounding space": "  MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=\n",
+		"unpadded":          "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY",
+	}
+
+	for name, rawKey := range testCases {
+		t.Run(name, func(t *testing.T) {
+			key, err := SecurityConfig{AppMasterKey: rawKey}.MasterKey()
+			require.NoError(t, err)
+			require.Equal(t, []byte("0123456789abcdef0123456789abcdef"), key)
+		})
+	}
+}
+
+func TestSecurityConfigMasterKey_ReturnsErrorWhenInvalid(t *testing.T) {
+	testCases := map[string]struct {
+		rawKey  string
+		message string
+	}{
+		"empty":        {rawKey: "   ", message: "security.app_master_key is required"},
+		"not base64":   {rawKey: "$(openssl rand -base64 32)", message: "not valid base64"},
+		"placeholder":  {rawKey: "replace-with-base64-32-byte-key", message: "must decode to 32 bytes"},
+		"wrong length": {rawKey: "MDEyMzQ1Njc4OWFiY2RlZg==", message: "must decode to 32 bytes"},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			_, err := SecurityConfig{AppMasterKey: testCase.rawKey}.MasterKey()
+			require.Error(t, err)
+			require.ErrorContains(t, err, testCase.message)
+		})
+	}
+}
+
+func TestConfigValidate_ReturnsErrorWhenMasterKeyInvalid(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Security.AppMasterKey = "$(openssl rand -base64 32)"
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "security.app_master_key")
+}
+
 func validTestConfig() Config {
 	return Config{
 		Collector: CollectorConfig{
