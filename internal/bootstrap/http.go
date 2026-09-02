@@ -108,15 +108,35 @@ func registerStaticFileRoute(engine *gin.Engine, staticFS fs.FS, routePath strin
 	})
 }
 
+// quietRequestPaths 是健康检查一类的高频探活路径，成功时不写访问日志。
+var quietRequestPaths = map[string]struct{}{
+	"/healthz":       {},
+	"/api/v1/health": {},
+}
+
 func requestLogger(log zerolog.Logger) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		startedAt := time.Now()
 		ctx.Next()
 
-		log.Info().
-			Int("status", ctx.Writer.Status()).
+		status := ctx.Writer.Status()
+		requestPath := ctx.Request.URL.Path
+		if _, quiet := quietRequestPaths[requestPath]; quiet && status < http.StatusBadRequest {
+			return
+		}
+
+		event := log.Info()
+		switch {
+		case status >= http.StatusInternalServerError:
+			event = log.Error()
+		case status >= http.StatusBadRequest:
+			event = log.Warn()
+		}
+
+		event.
+			Int("status", status).
 			Str("method", ctx.Request.Method).
-			Str("path", ctx.Request.URL.Path).
+			Str("path", requestPath).
 			Dur("duration", time.Since(startedAt)).
 			Msg("http request completed")
 	}
