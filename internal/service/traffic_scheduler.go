@@ -174,6 +174,7 @@ func (scheduler *TrafficScheduler) collectWithRetry(ctx context.Context, machine
 		if err == nil {
 			scheduler.log.Info().
 				Uint("machine_id", machine.ID).
+				Str("machine_name", machine.Name).
 				Str("host", machine.Host).
 				Int("sample_count", len(samples)).
 				Int("attempt", attempt+1).
@@ -186,6 +187,7 @@ func (scheduler *TrafficScheduler) collectWithRetry(ctx context.Context, machine
 		scheduler.log.Error().
 			Err(err).
 			Uint("machine_id", machine.ID).
+			Str("machine_name", machine.Name).
 			Str("host", machine.Host).
 			Int("attempt", attempt+1).
 			Dur("duration", time.Since(startedAt)).
@@ -206,6 +208,7 @@ func (scheduler *TrafficScheduler) collectWithRetry(ctx context.Context, machine
 		scheduler.log.Error().
 			Err(lastErr).
 			Uint("machine_id", machine.ID).
+			Str("machine_name", machine.Name).
 			Str("host", machine.Host).
 			Msg("traffic collection exhausted retries")
 	}
